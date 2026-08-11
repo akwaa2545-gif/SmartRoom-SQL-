@@ -3,6 +3,7 @@ import { httpsCallable } from 'firebase/functions';
 import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db, functions } from '../firebase';
+import { getPortableVerificationContext, isPortableMailApiEnabled, verifyPortableBookingToken } from '../utils/portableMailApi';
 
 interface VerifyBookingPageProps {
   language: 'th' | 'en';
@@ -58,9 +59,9 @@ const VerifyBookingPage: React.FC<VerifyBookingPageProps> = ({ language }) => {
   const verifyBooking = async (booking: VerificationBooking) => {
     setState({ status: 'submitting', booking });
     try {
-      const verifyToken = httpsCallable(functions, 'verifyBookingToken');
-      const response = await verifyToken({ bookingId, token });
-      const data = response.data as { title?: string; alreadyVerified?: boolean };
+      const data = isPortableMailApiEnabled()
+        ? await verifyPortableBookingToken(bookingId, token)
+        : (await httpsCallable(functions, 'verifyBookingToken')({ bookingId, token })).data as { title?: string; alreadyVerified?: boolean };
       setState({
         status: 'success',
         title: data.title,
@@ -103,6 +104,51 @@ const VerifyBookingPage: React.FC<VerifyBookingPageProps> = ({ language }) => {
       }
 
       try {
+        if (isPortableMailApiEnabled()) {
+          const data = await getPortableVerificationContext(bookingId, token);
+          if (cancelled) return;
+
+          const startTime = parseDate(data.startTime);
+          const endTime = parseDate(data.endTime);
+          const actualStartTime = parseDate(data.actualStartTime);
+          const windowStart = parseDate(data.verificationWindowOpenedAt) || (startTime ? new Date(startTime.getTime() - 15 * 60 * 1000) : null);
+          const windowEnd = parseDate(data.verificationWindowClosedAt) || (startTime ? new Date(startTime.getTime() + 15 * 60 * 1000) : null);
+
+          if (!startTime || !endTime) {
+            setState({
+              status: 'error',
+              message: language === 'th' ? 'à¸‚à¹‰à¸­à¸¡à¸¹à¸¥à¹€à¸§à¸¥à¸²à¸ˆà¸­à¸‡à¹„à¸¡à¹ˆà¸–à¸¹à¸à¸•à¹‰à¸­à¸‡' : 'The booking time data is invalid.',
+            });
+            return;
+          }
+
+          if (data.status === 'VERIFIED' || actualStartTime) {
+            setState({ status: 'success', title: data.title, alreadyVerified: true });
+            return;
+          }
+
+          if (data.status === 'REJECTED' || data.status === 'NO_SHOW' || data.status === 'MISSED_CHECK_IN') {
+            setState({
+              status: 'error',
+              message: language === 'th' ? 'à¸£à¸²à¸¢à¸à¸²à¸£à¸ˆà¸­à¸‡à¸™à¸µà¹‰à¹„à¸¡à¹ˆà¸ªà¸²à¸¡à¸²à¸£à¸–à¸¢à¸·à¸™à¸¢à¸±à¸™à¹„à¸”à¹‰à¹à¸¥à¹‰à¸§' : 'This booking can no longer be verified.',
+            });
+            return;
+          }
+
+          setState({
+            status: 'ready',
+            booking: {
+              title: data.title,
+              startTime,
+              endTime,
+              windowStart: windowStart || new Date(startTime.getTime() - 15 * 60 * 1000),
+              windowEnd: windowEnd || new Date(startTime.getTime() + 15 * 60 * 1000),
+              emailScheduledAt: windowStart || undefined,
+            },
+          });
+          return;
+        }
+
         const snap = await getDoc(doc(db, 'bookings', bookingId));
         if (cancelled) return;
 

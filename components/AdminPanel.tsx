@@ -7,6 +7,7 @@ import ConfirmationModal from './ConfirmationModal';
 import { collection, onSnapshot, setDoc, doc } from 'firebase/firestore';
 import { signInAnonymously } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
+import { getPortableAdminEmailHistory, isPortableMailApiEnabled, loginPortableAdmin, runPortableAdminTool } from '../utils/portableMailApi';
 import { db, auth, functions, handleFirestoreError, OperationType } from '../firebase';
 import { AdminGuideModal } from './admin/AdminGuideModal';
 import { EditBookingModal } from './admin/EditBookingModal';
@@ -547,6 +548,16 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isPortableMailApiEnabled()) {
+      try {
+        const user = await loginPortableAdmin(loginUsername, loginPassword);
+        completeLogin({ ...user, password: '' });
+        setLoginPassword('');
+      } catch {
+        setLoginErrorKey('invalidUserPass');
+      }
+      return;
+    }
     const hashed = await hashPassword(loginPassword);
 
     try {
@@ -773,8 +784,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const handleRoomSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Ensure Firebase auth session exists before save (attempt anonymous auth silently, but proceed anyway)
-    if (!auth.currentUser) {
+    // The portable API authenticates with the current admin session instead of Firebase.
+    if (!isPortableMailApiEnabled() && !auth.currentUser) {
       try {
         await signInAnonymously(auth);
       } catch (authErr) {
@@ -835,27 +846,43 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       closureEndTime: BOOKING_END_HOUR
     };
 
+    const roomToSave = {
+      ...restRoomForm,
+      ...closureData,
+      id: editingRoom?.id || Math.random().toString(36).substr(2, 9),
+      imageUrl: finalImageUrl,
+      amenities
+    } as Room;
+    const maintenanceRecord = roomToSave.isClosed ? {
+      id: [
+        roomToSave.id,
+        roomToSave.closureStartDate,
+        roomToSave.closureEndDate,
+        roomToSave.closureStartTime,
+        roomToSave.closureEndTime,
+        roomToSave.closureReason || 'Maintenance'
+      ].join('_').replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 180),
+      roomId: roomToSave.id,
+      roomName: roomToSave.name,
+      reason: roomToSave.closureReason || 'Maintenance',
+      startDate: roomToSave.closureStartDate || '',
+      endDate: roomToSave.closureEndDate || '',
+      startTime: roomToSave.closureStartTime ?? BOOKING_START_HOUR,
+      endTime: roomToSave.closureEndTime ?? BOOKING_END_HOUR
+    } : null;
+
     try {
-      if (editingRoom) {
-        await onUpdateRoom({
-          ...editingRoom,
-          ...restRoomForm,
-          ...closureData,
-          id: editingRoom.id,
-          imageUrl: finalImageUrl,
-          amenities
-        } as Room);
+      if (isPortableMailApiEnabled()) {
+        await runPortableAdminTool('save_room', { room: roomToSave, maintenanceRecord });
+      } else if (editingRoom) {
+        await onUpdateRoom({ ...editingRoom, ...roomToSave } as Room);
         showNotification(t.roomUpdatedSuccess, 'success');
       } else {
-        const randomId = Math.random().toString(36).substr(2, 9);
-        await onAddRoom({
-          ...restRoomForm,
-          ...closureData,
-          id: randomId,
-          imageUrl: finalImageUrl,
-          amenities
-        } as Room);
+        await onAddRoom(roomToSave);
         showNotification(t.roomCreatedSuccess, 'success');
+      }
+      if (isPortableMailApiEnabled()) {
+        showNotification(editingRoom ? t.roomUpdatedSuccess : t.roomCreatedSuccess, 'success');
       }
       setIsRoomModalOpen(false);
     } catch (err: any) {
@@ -895,11 +922,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const bookingMatchesSearch = (b: Booking) => {
     const normalizedSearchTerm = searchTerm.toLowerCase();
-    const departmentDisplayName = formatDepartment(b.department).toLowerCase();
+    const departmentDisplayName = formatDepartment(b.department || '').toLowerCase();
 
     return (
-      b.title.toLowerCase().includes(normalizedSearchTerm) ||
-      b.organizer.toLowerCase().includes(normalizedSearchTerm) ||
+      (b.title || '').toLowerCase().includes(normalizedSearchTerm) ||
+      (b.organizer || '').toLowerCase().includes(normalizedSearchTerm) ||
       (b.department && b.department.toLowerCase().includes(normalizedSearchTerm)) ||
       departmentDisplayName.includes(normalizedSearchTerm) ||
       (b.employeeId && b.employeeId.toLowerCase().includes(normalizedSearchTerm)) ||
@@ -1344,6 +1371,21 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const loadEmailHistory = async () => {
     if (!currentUser) return;
+    if (isPortableMailApiEnabled()) {
+      setIsEmailHistoryLoading(true);
+      setEmailHistoryError('');
+      try {
+        const history = await getPortableAdminEmailHistory();
+        const records = history.map(normalizeEmailHistoryRecord);
+        records.sort((a, b) => b.sentAt.getTime() - a.sentAt.getTime());
+        setEmailHistory(records);
+      } catch (error) {
+        setEmailHistoryError(error instanceof Error ? error.message : 'Email history load failed.');
+      } finally {
+        setIsEmailHistoryLoading(false);
+      }
+      return;
+    }
 
     setIsEmailHistoryLoading(true);
     setEmailHistoryError('');
@@ -1404,6 +1446,60 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     } finally {
       setIsAnnouncementLoading(false);
     }
+  };
+
+  const handleDeleteRoom = (room: Room) => {
+    if (!isPortableMailApiEnabled()) {
+      onDeleteRoom(room.id);
+      return;
+    }
+
+    setConfirmModal({
+      isOpen: true,
+      title: 'Confirm Delete Room',
+      message: t.confirmDeleteRoom,
+      isDanger: true,
+      confirmText: 'Delete Room',
+      cancelText: 'Cancel',
+      onConfirm: async () => {
+        try {
+          await runPortableAdminTool('delete_room', { roomId: room.id });
+          showNotification(`Room ${room.name} deleted successfully`, 'success');
+        } catch (error) {
+          console.error('Portable room delete failed', error);
+          showNotification(`Room delete failed: ${error instanceof Error ? error.message : String(error)}`, 'error');
+        } finally {
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        }
+      }
+    });
+  };
+
+  const handleDeleteBooking = (booking: Booking) => {
+    if (!isPortableMailApiEnabled()) {
+      onDeleteBooking(booking.id);
+      return;
+    }
+
+    setConfirmModal({
+      isOpen: true,
+      title: 'Confirm Delete Booking',
+      message: t.confirmDeleteBooking,
+      isDanger: true,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      onConfirm: async () => {
+        try {
+          await runPortableAdminTool('delete_booking', { bookingId: booking.id });
+          showNotification('Booking successfully deleted', 'success');
+        } catch (error) {
+          console.error('Portable booking delete failed', error);
+          showNotification(`Booking delete failed: ${error instanceof Error ? error.message : String(error)}`, 'error');
+        } finally {
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        }
+      }
+    });
   };
 
   useEffect(() => {
@@ -1569,7 +1665,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     sortedInternalBookingOptions.filter(booking => (
       booking.status === BookingStatus.CONFIRMED &&
       !booking.actualStartTime &&
-      isYageoEmailAddress(booking.email || '')
+      (isPortableMailApiEnabled() || isYageoEmailAddress(booking.email || ''))
     ))
   ), [sortedInternalBookingOptions]);
 
@@ -1611,7 +1707,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     if (!adminPayload) {
       throw new Error('Admin session is required.');
     }
-
+    if (isPortableMailApiEnabled()) return runPortableAdminTool<T>(tool, payload);
     const runTool = httpsCallable(functions, 'runInternalAdminTool');
     const response = await runTool({
       tool,
@@ -2141,14 +2237,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                   <Edit className="w-4 h-4" />
                                 </button>
                               )}
-                              {/* All admins can delete bookings */}
-                              <button
-                                onClick={() => onDeleteBooking(booking.id)}
-                                className="inline-flex items-center justify-center rounded-lg p-1.5 text-slate-500 border border-slate-200 bg-white hover:bg-red-50 hover:text-red-600 hover:border-red-200 shadow-sm transition-all"
-                                title={t.deleteButton}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                              {(!isPortableMailApiEnabled() || currentUser?.role === 'SUPER_ADMIN') && (
+                                <button
+                                  onClick={() => handleDeleteBooking(booking)}
+                                  className="inline-flex items-center justify-center rounded-lg p-1.5 text-slate-500 border border-slate-200 bg-white hover:bg-red-50 hover:text-red-600 hover:border-red-200 shadow-sm transition-all"
+                                  title={t.deleteButton}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -2395,13 +2492,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                 <Edit className="w-4 h-4" />
                               </button>
                             )}
-                            <button
-                              onClick={() => onDeleteBooking(booking.id)}
-                              className="inline-flex items-center justify-center rounded-lg p-1.5 text-slate-500 border border-slate-200 bg-white hover:bg-red-50 hover:text-red-600 hover:border-red-200 shadow-sm transition-all"
-                              title={t.deleteButton}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            {(!isPortableMailApiEnabled() || currentUser?.role === 'SUPER_ADMIN') && (
+                              <button
+                                onClick={() => handleDeleteBooking(booking)}
+                                className="inline-flex items-center justify-center rounded-lg p-1.5 text-slate-500 border border-slate-200 bg-white hover:bg-red-50 hover:text-red-600 hover:border-red-200 shadow-sm transition-all"
+                                title={t.deleteButton}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -3002,7 +3101,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                   ) : (
                     forceEmailBookingOptions.map((booking) => (
                       <option key={booking.id} value={booking.id}>
-                        {`${formatDate(booking.startTime, language, { weekday: undefined, month: 'short', day: 'numeric', year: 'numeric' })} | ${formatTimeRange(booking.startTime, booking.endTime, language)} | ${getRoomName(booking.roomId)} | ${booking.email || '-'} | ${translateText(booking.title, language)}`}
+                        {`${formatDate(booking.startTime, language, { weekday: undefined, month: 'short', day: 'numeric', year: 'numeric' })} | ${formatTimeRange(booking.startTime, booking.endTime, language)} | ${getRoomName(booking.roomId)} | ${isPortableMailApiEnabled() ? translateText(booking.title, language) : `${booking.email || '-'} | ${translateText(booking.title, language)}`}`}
                       </option>
                     ))
                   )}
@@ -3279,7 +3378,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                           <Edit className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => onDeleteRoom(room.id)}
+                          onClick={() => handleDeleteRoom(room)}
                           className="text-slate-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-lg transition-all"
                           title={t.deleteButton}
                         >

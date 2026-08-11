@@ -31,6 +31,7 @@ import ConfirmationModal from './ConfirmationModal';
 import { BOOKABLE_HOURS, BOOKING_START_HOUR, BOOKING_END_HOUR, DEPARTMENTS } from '../constants';
 import { functions } from '../firebase';
 import { BookingDisplayState, getBookingDisplayState as getSharedBookingDisplayState, isBookingNoCheckIn } from '../utils/bookingStatus';
+import { isPortableMailApiEnabled, lookupPortableMailbox, searchPortableMailboxes } from '../utils/portableMailApi';
 
 export type DashboardMainView = 'status' | 'timeline';
 
@@ -218,8 +219,9 @@ const Dashboard: React.FC<DashboardProps> = ({
     const timeout = window.setTimeout(async () => {
       setIsEmailLookupLoading(true);
       try {
-        const searchMailboxes = httpsCallable(functions, 'searchYageoMailboxes');
-        const response = await searchMailboxes({ query });
+        const response = isPortableMailApiEnabled()
+          ? { data: await searchPortableMailboxes(query) }
+          : await httpsCallable(functions, 'searchYageoMailboxes')({ query });
         if (emailLookupRequestIdRef.current !== requestId) return;
 
         const data = response.data as { users?: YageoMailboxUser[] };
@@ -636,9 +638,9 @@ const Dashboard: React.FC<DashboardProps> = ({
       return selectedEmailUser;
     }
 
-    const lookupMailbox = httpsCallable(functions, 'lookupYageoMailbox');
-    const response = await lookupMailbox({ email: normalizedEmail });
-    const data = response.data as { exists?: boolean; email?: string; user?: YageoMailboxUser };
+    const data = (isPortableMailApiEnabled()
+      ? await lookupPortableMailbox(normalizedEmail)
+      : (await httpsCallable(functions, 'lookupYageoMailbox')({ email: normalizedEmail })).data) as { exists?: boolean; email?: string; user?: YageoMailboxUser };
     const responseEmail = (data.email || '').trim().toLowerCase();
     const responseUserEmail = data.user ? getMailboxEmail(data.user) : '';
 

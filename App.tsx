@@ -9,6 +9,7 @@ import { DashboardSkeleton } from './components/SkeletonLoader';
 const AdminPanel = React.lazy(() => import('./components/AdminPanel'));
 import ConfirmationModal from './components/ConfirmationModal';
 import VerifyBookingPage from './components/VerifyBookingPage';
+import { LocalNetworkAccessGuide } from './components/LocalNetworkAccessGuide';
 import { TRANSLATIONS, getEffectiveRoomStatus, isRoomClosureExpired, isRoomClosedAt, isRoomCurrentlyClosed } from './translations';
 import { LayoutGrid, Calendar, BarChart3, Settings, Check, XCircle, AlertCircle, BookOpen, Menu, X } from 'lucide-react';
 import { TermsModal, AccessDeniedOverlay } from './components/TermsModal';
@@ -18,6 +19,7 @@ import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
 import { db, auth, functions, handleFirestoreError, OperationType, testFirestoreConnection } from './firebase';
 import { isBookingNoCheckIn, isBookingRoomInUse } from './utils/bookingStatus';
+import { createPortableBooking, getPortableBookings, getPortableMaintenanceHistory, getPortableRooms, isPortableMailApiEnabled, lookupPortableMailbox, requestPortableLocalNetworkAccess, sendPortableBookingVerificationEmail } from './utils/portableMailApi';
 
 type AppView = 'grid' | 'dashboard' | 'admin';
 type RouteMode = 'app' | 'verify';
@@ -246,6 +248,16 @@ const SmartRoomApplication: React.FC = () => {
 
   const t = TRANSLATIONS[language];
   const [dashboardActiveView, setDashboardActiveView] = useState<'status' | 'timeline'>('status');
+  const [portableNetworkReady, setPortableNetworkReady] = useState(() => !isPortableMailApiEnabled());
+
+  useEffect(() => {
+    if (!isPortableMailApiEnabled()) return;
+    let active = true;
+    void requestPortableLocalNetworkAccess().then((result) => {
+      if (active && result === 'granted') setPortableNetworkReady(true);
+    });
+    return () => { active = false; };
+  }, []);
 
   // --- DATABASE STATE (Real-time Firestore) ---
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -456,6 +468,27 @@ const SmartRoomApplication: React.FC = () => {
 
   // 1. Subscribe to Rooms
   useEffect(() => {
+    if (isPortableMailApiEnabled()) {
+      let cancelled = false;
+      const loadRooms = async () => {
+        try {
+          const { rooms: sqlRooms } = await getPortableRooms();
+          if (!cancelled) {
+            setRooms(sqlRooms as Room[]);
+            setIsInitialLoading(false);
+          }
+        } catch (cause) {
+          console.error('SQL room load failed:', cause);
+          if (!cancelled) {
+            setRooms([]);
+            setIsInitialLoading(false);
+          }
+        }
+      };
+      void loadRooms();
+      const interval = window.setInterval(() => void loadRooms(), 60_000);
+      return () => { cancelled = true; window.clearInterval(interval); };
+    }
     const unsubscribe = onSnapshot(collection(db, 'rooms'), (snapshot) => {
       if (snapshot.empty) {
         const hasSeeded = localStorage.getItem('smartroom_rooms_seeded');
@@ -497,6 +530,21 @@ const SmartRoomApplication: React.FC = () => {
 
   // 1.5 Subscribe to room maintenance history
   useEffect(() => {
+    if (isPortableMailApiEnabled()) {
+      let cancelled = false;
+      const loadHistory = async () => {
+        try {
+          const { history } = await getPortableMaintenanceHistory();
+          if (!cancelled) setMaintenanceHistory(history.map((record) => ({ ...record, createdAt: record.createdAt ? new Date(record.createdAt) : undefined })) as RoomMaintenanceRecord[]);
+        } catch (cause) {
+          console.error('SQL maintenance history load failed:', cause);
+          if (!cancelled) setMaintenanceHistory([]);
+        }
+      };
+      void loadHistory();
+      const interval = window.setInterval(() => void loadHistory(), 60_000);
+      return () => { cancelled = true; window.clearInterval(interval); };
+    }
     const unsubscribe = onSnapshot(collection(db, 'roomMaintenanceHistory'), (snapshot) => {
       const loadedRecords: RoomMaintenanceRecord[] = [];
       snapshot.forEach((docSnap) => {
@@ -517,6 +565,42 @@ const SmartRoomApplication: React.FC = () => {
 
   // 2. Subscribe to Bookings (optimized to last 30 days to optimize client-side sync)
   useEffect(() => {
+    if (isPortableMailApiEnabled()) {
+      let cancelled = false;
+      const loadBookings = async () => {
+        try {
+          const { bookings: sqlBookings } = await getPortableBookings();
+          if (cancelled) return;
+          const loadedBookings = sqlBookings
+            .filter((booking) => !deletedBookingIdsRef.current.has(booking.id) && booking.status !== BookingStatus.NO_SHOW)
+            .map((booking) => ({
+              ...booking,
+              startTime: new Date(booking.startTime),
+              endTime: new Date(booking.endTime),
+              actualStartTime: booking.actualStartTime ? new Date(booking.actualStartTime) : undefined,
+              actualEndTime: booking.actualEndTime ? new Date(booking.actualEndTime) : undefined,
+              verifiedAt: booking.verifiedAt ? new Date(booking.verifiedAt) : undefined,
+              verificationEmailScheduledAt: booking.verificationEmailScheduledAt ? new Date(booking.verificationEmailScheduledAt) : undefined,
+              verificationWindowOpenedAt: booking.verificationWindowOpenedAt ? new Date(booking.verificationWindowOpenedAt) : undefined,
+              verificationWindowClosedAt: booking.verificationWindowClosedAt ? new Date(booking.verificationWindowClosedAt) : undefined,
+              verificationEmailNextRetryAt: booking.verificationEmailNextRetryAt ? new Date(booking.verificationEmailNextRetryAt) : undefined,
+              verificationEmailLastAttemptAt: booking.verificationEmailLastAttemptAt ? new Date(booking.verificationEmailLastAttemptAt) : undefined,
+              verificationEmailFailedAt: booking.verificationEmailFailedAt ? new Date(booking.verificationEmailFailedAt) : undefined,
+            } as Booking));
+          setBookings(loadedBookings);
+          setIsInitialLoading(false);
+        } catch (cause) {
+          console.error('SQL booking load failed:', cause);
+          if (!cancelled) {
+            setBookings([]);
+            setIsInitialLoading(false);
+          }
+        }
+      };
+      void loadBookings();
+      const interval = window.setInterval(() => void loadBookings(), 30_000);
+      return () => { cancelled = true; window.clearInterval(interval); };
+    }
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const bookingsQuery = query(
@@ -1092,12 +1176,12 @@ const SmartRoomApplication: React.FC = () => {
       return null;
     }
 
+    if (isPortableMailApiEnabled()) {
+      return sendPortableBookingVerificationEmail(bookingId, email!.trim().toLowerCase());
+    }
+
     const sendEmail = httpsCallable(functions, 'sendBookingVerificationEmail');
-    const response = await sendEmail({
-      bookingId,
-      email: email!.trim().toLowerCase(),
-      appUrl: APP_BASE_URL,
-    });
+    const response = await sendEmail({ bookingId, email: email!.trim().toLowerCase(), appUrl: APP_BASE_URL });
     return response.data as {
       bookingId?: string;
       scheduledAt?: string;
@@ -1110,9 +1194,9 @@ const SmartRoomApplication: React.FC = () => {
   };
 
   const verifyYageoMailbox = async (email: string) => {
-    const lookupMailbox = httpsCallable(functions, 'lookupYageoMailbox');
-    const response = await lookupMailbox({ email });
-    const data = response.data as { exists?: boolean };
+    const data = isPortableMailApiEnabled()
+      ? await lookupPortableMailbox(email)
+      : (await httpsCallable(functions, 'lookupYageoMailbox')({ email })).data as { exists?: boolean };
 
     if (!data.exists) {
       throw new Error('No active YAGEO mailbox matched this email address.');
@@ -1120,12 +1204,21 @@ const SmartRoomApplication: React.FC = () => {
   };
 
   const markBookingNoShow = async (bookingId: string) => {
+    if (isPortableMailApiEnabled()) {
+      return;
+    }
     const markNoShow = httpsCallable(functions, 'markBookingNoShow');
     await markNoShow({ bookingId });
   };
 
   const handleConfirmBooking = async (roomOrBookingData: any, optionalData?: { title: string; organizer: string; department: string; employeeId: string; date: string; selectedHours: number[] }): Promise<boolean> => {
     try {
+      if (isPortableMailApiEnabled() && !portableNetworkReady) {
+        showNotification(language === 'th'
+          ? 'ระบบยังไม่ถูกตั้งค่า คุณจะไม่สามารถจองห้องได้ กรุณาอนุญาตการเข้าถึงเครือข่ายภายในก่อน'
+          : 'The system is not configured. Please allow local network access before booking a room.', 'error');
+        return false;
+      }
       if (optionalData === undefined) {
         // Direct booking data passed from Dashboard inline booking form
         const bookingData = roomOrBookingData;
@@ -1217,6 +1310,7 @@ const SmartRoomApplication: React.FC = () => {
           emailDisplayName: bookingData.emailDisplayName || '',
           emailJobTitle: bookingData.emailJobTitle || '',
           emailDepartment: bookingData.emailDepartment || '',
+          createdByUid: auth.currentUser?.uid || '',
           startTime: bookingData.startTime,
           endTime: bookingData.endTime,
           status: BookingStatus.CONFIRMED, // Automatically confirm new bookings
@@ -1229,6 +1323,14 @@ const SmartRoomApplication: React.FC = () => {
 
         newBooking.email = normalizedBookingEmail;
 
+        if (isPortableMailApiEnabled()) {
+          const created = await createPortableBooking({ ...newBooking, startTime: newBooking.startTime.toISOString(), endTime: newBooking.endTime.toISOString() });
+          const portableBooking = { ...created.booking, startTime: new Date(String(created.booking.startTime)), endTime: new Date(String(created.booking.endTime)) } as Booking;
+          setBookings((previous) => [...previous, portableBooking]);
+          showBookingConfirmationModal(bookingData.startTime, created.status === 'sent' ? 'sent' : 'queued');
+          if (created.status === 'failed') showNotification('Booking was saved, but the verification email could not be sent. Please contact an administrator.', 'error');
+          return true;
+        }
         await setDoc(doc(db, 'bookings', newBookingId), newBooking);
         try {
           const verificationInfo = await sendVerificationEmail(newBookingId, newBooking.email);
@@ -1336,7 +1438,13 @@ const SmartRoomApplication: React.FC = () => {
             createdAt: new Date()
           };
 
-          await setDoc(doc(db, 'bookings', newBookingId), newBooking);
+          if (isPortableMailApiEnabled()) {
+            const created = await createPortableBooking({ ...newBooking, startTime: start.toISOString(), endTime: end.toISOString() });
+            const portableBooking = { ...created.booking, startTime: new Date(String(created.booking.startTime)), endTime: new Date(String(created.booking.endTime)) } as Booking;
+            setBookings((previous) => [...previous, portableBooking]);
+          } else {
+            await setDoc(doc(db, 'bookings', newBookingId), newBooking);
+          }
         }
         setIsModalOpen(false);
         setSelectedRoom(null);
@@ -1476,6 +1584,7 @@ const SmartRoomApplication: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
+      <LocalNetworkAccessGuide onAccessGranted={() => setPortableNetworkReady(true)} />
       <AnnouncementModal
         page={announcementPage}
         audience={announcementAudience}
