@@ -30,7 +30,7 @@ export const TermsModal: React.FC<TermsModalProps> = ({
             <ShieldAlert className="w-6 h-6 text-brand-300 animate-pulse flex-shrink-0" />
             <div>
               <h2 className="font-bold text-lg leading-snug">{t.termsTitle}</h2>
-              <p className="text-xs text-slate-100/80 font-medium">YAGEO SMARTROOM SERVICE RULES</p>
+              <p className="text-xs text-slate-100/80 font-medium">TOKIN SMART ROOM SERVICE RULES</p>
             </div>
           </div>
 
@@ -57,8 +57,8 @@ export const TermsModal: React.FC<TermsModalProps> = ({
             <Flame className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5 animate-bounce" />
             <div className="text-xs leading-relaxed text-amber-900 font-semibold">
               {language === 'th'
-                ? 'โปรดอ่านและทำความเข้าใจแนวปฏิบัติในการใช้บริการห้องประชุม/ห้องค้นคว้าของสํานักงาน YAGEO เพื่อความเป็นระเบียบเรียบร้อยและความปลอดภัยสูงสุด'
-                : 'Please read and understand the room service guidelines and rules of the YAGEO office to ensure order, safety, and operational efficiency.'}
+                ? 'โปรดอ่านและทำความเข้าใจแนวปฏิบัติในการใช้บริการห้องประชุม/ห้องค้นคว้าของสํานักงาน TOKIN เพื่อความเป็นระเบียบเรียบร้อยและความปลอดภัยสูงสุด'
+                : 'Please read and understand the room service guidelines and rules of the TOKIN office to ensure order, safety, and operational efficiency.'}
             </div>
           </div>
 

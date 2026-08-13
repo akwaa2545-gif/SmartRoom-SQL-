@@ -1,5 +1,8 @@
 import { Room, RoomType, BookingStatus, AdminUser } from './types';
 
+export const CANONICAL_APP_URL = 'https://tokinsmartroom-495306.web.app/';
+export const APP_BASE_URL = ((import.meta as any).env?.VITE_APP_URL || CANONICAL_APP_URL).replace(/\/+$/, '');
+
 export const BOOKING_START_HOUR = 7;
 export const BOOKING_END_HOUR = 19;
 export const BOOKABLE_HOURS = Array.from(
@@ -21,16 +24,19 @@ export const DEPARTMENTS = [
   'QA',
   'TA MFG',
   'SC',
-  'IT'
+  'IT',
+  'TE'
 ];
+
+const DEFAULT_BOOTSTRAP_PASSWORD_HASH = 'a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3';
 
 export const INITIAL_ADMIN_USERS: AdminUser[] = [
   {
     id: 'admin1',
     username: 'admin',
-    password: '123',
+    password: DEFAULT_BOOTSTRAP_PASSWORD_HASH,
     role: 'SUPER_ADMIN',
-    name: 'YAGEO HR Admin',
+    name: 'TOKIN HR Admin',
     employeeId: 'HR001',
     department: 'HR',
     phone: '9999'
@@ -38,9 +44,9 @@ export const INITIAL_ADMIN_USERS: AdminUser[] = [
   {
     id: 'approver1',
     username: 'approver',
-    password: '123',
+    password: DEFAULT_BOOTSTRAP_PASSWORD_HASH,
     role: 'APPROVER',
-    name: 'YAGEO Room Approver',
+    name: 'TOKIN Room Approver',
     employeeId: 'HR002',
     department: 'HR',
     phone: '8888'

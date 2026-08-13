@@ -3,9 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>YAGEO SmartRoom</title>
+    <title>TOKIN Smart Room</title>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <meta name="theme-color" content="#e5673e" />
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script>
       tailwind.config = {
         theme: {
@@ -25,15 +26,22 @@
               }
             },
             fontFamily: {
-              sans: ['Poppins', 'sans-serif'],
+              sans: ['FC Pride', 'Arial', 'sans-serif'],
             }
           }
         }
       }
     </script>
     <style>
+      @font-face {
+        font-family: 'FC Pride';
+        src: url('/fonts/fc-pride-non-commercial.otf') format('opentype');
+        font-weight: 100 900;
+        font-style: normal;
+        font-display: swap;
+      }
       body {
-        font-family: 'Poppins', sans-serif;
+        font-family: 'FC Pride', Arial, sans-serif;
       }
       /* Custom scrollbar for cleaner UI */
       ::-webkit-scrollbar {
@@ -50,60 +58,58 @@
       ::-webkit-scrollbar-thumb:hover {
         background: #94a3b8; 
       }
-      @keyframes itRgbNeonShift {
-        0% {
-          background-position: 0% 50%;
-          box-shadow: 0 0 12px rgba(6, 182, 212, 0.55), 0 0 26px rgba(59, 130, 246, 0.38);
-        }
-        50% {
-          box-shadow: 0 0 14px rgba(168, 85, 247, 0.5), 0 0 30px rgba(236, 72, 153, 0.34);
-        }
-        100% {
-          background-position: 100% 50%;
-          box-shadow: 0 0 12px rgba(34, 197, 94, 0.46), 0 0 26px rgba(34, 211, 238, 0.34);
-        }
+      @keyframes itRgbGlow {
+        0%   { box-shadow: 0 0 8px 2px #00f5ff, 0 0 22px 5px #00f5ff88, 0 0 50px 10px #00f5ff33; outline-color: #00f5ff; }
+        14%  { box-shadow: 0 0 8px 2px #0055ff, 0 0 22px 5px #0055ff88, 0 0 50px 10px #0055ff33; outline-color: #0055ff; }
+        28%  { box-shadow: 0 0 8px 2px #aa00ff, 0 0 22px 5px #aa00ff88, 0 0 50px 10px #aa00ff33; outline-color: #aa00ff; }
+        42%  { box-shadow: 0 0 8px 2px #ff00cc, 0 0 22px 5px #ff00cc88, 0 0 50px 10px #ff00cc33; outline-color: #ff00cc; }
+        57%  { box-shadow: 0 0 8px 2px #ff3300, 0 0 22px 5px #ff330088, 0 0 50px 10px #ff330033; outline-color: #ff3300; }
+        71%  { box-shadow: 0 0 8px 2px #ffcc00, 0 0 22px 5px #ffcc0088, 0 0 50px 10px #ffcc0033; outline-color: #ffcc00; }
+        85%  { box-shadow: 0 0 8px 2px #00ff44, 0 0 22px 5px #00ff4488, 0 0 50px 10px #00ff4433; outline-color: #00ff44; }
+        100% { box-shadow: 0 0 8px 2px #00f5ff, 0 0 22px 5px #00f5ff88, 0 0 50px 10px #00f5ff33; outline-color: #00f5ff; }
       }
-      @keyframes itRgbNeonSweep {
-        0% {
-          transform: translateX(-130%) skewX(-18deg);
-          opacity: 0;
-        }
-        24% {
-          opacity: 0.7;
-        }
-        52% {
-          transform: translateX(130%) skewX(-18deg);
-          opacity: 0;
-        }
-        100% {
-          transform: translateX(130%) skewX(-18deg);
-          opacity: 0;
-        }
+
+      @keyframes itRgbBorder {
+        0%   { border-color: #00f5ff; }
+        14%  { border-color: #0055ff; }
+        28%  { border-color: #aa00ff; }
+        42%  { border-color: #ff00cc; }
+        57%  { border-color: #ff3300; }
+        71%  { border-color: #ffcc00; }
+        85%  { border-color: #00ff44; }
+        100% { border-color: #00f5ff; }
       }
       .booking-it-neon {
         position: relative;
         isolation: isolate;
-        overflow: hidden;
-        border-color: rgba(34, 211, 238, 0.95) !important;
-        background:
-          linear-gradient(135deg, rgba(236, 254, 255, 0.98), rgba(240, 249, 255, 0.96), rgba(250, 245, 255, 0.94)) padding-box,
-          linear-gradient(90deg, #00f5ff, #2563eb, #8b5cf6, #ff2bd6, #22ff88, #00f5ff) border-box !important;
-        background-size: 100% 100%, 340% 340% !important;
-        color: #082f49 !important;
-        text-shadow: 0 0 10px rgba(255, 255, 255, 0.9);
-        animation: itRgbNeonShift 3.5s ease-in-out infinite alternate;
+        overflow: visible !important;
+        background: linear-gradient(135deg, #000d1a 0%, #050010 50%, #0a0018 100%) !important;
+        border: 2px solid #00f5ff !important;
+        outline: 1.5px solid #00f5ff;
+        outline-offset: 1px;
+        color: #e0ffff !important;
+        text-shadow: 0 0 6px #00f5ff, 0 0 12px rgba(0,200,255,0.8);
+        animation:
+          itRgbGlow   1.6s linear infinite,
+          itRgbBorder 1.6s linear infinite;
       }
-      .booking-it-neon::after {
+      .booking-it-neon::before {
         content: "";
         position: absolute;
-        inset: -45%;
+        inset: 0;
         z-index: 0;
         pointer-events: none;
-        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), rgba(0, 245, 255, 0.28), transparent);
-        animation: itRgbNeonSweep 2.8s ease-in-out infinite;
+        background: repeating-linear-gradient(
+          0deg,
+          transparent 0px,
+          transparent 3px,
+          rgba(0,245,255,0.05) 3px,
+          rgba(0,245,255,0.05) 4px
+        );
       }
       .booking-it-neon * {
-        color: inherit;
+        color: inherit !important;
+        text-shadow: inherit !important;
       }
       .booking-it-neon > * {
         position: relative;
@@ -111,15 +117,85 @@
       }
       @media (prefers-reduced-motion: reduce) {
         .booking-it-neon,
+        .booking-it-neon::after,
+        .booking-it-neon::before {
+          animation: none !important;
+          box-shadow: 0 0 12px rgba(0,245,255,0.7) !important;
+          border-color: #00f5ff !important;
+          outline-color: #00f5ff !important;
+        }
+      }
+      .timeline-grid-scroll {
+        overscroll-behavior-x: contain;
+        scroll-behavior: auto;
+        scrollbar-gutter: stable;
+        -webkit-overflow-scrolling: touch;
+        container-type: inline-size;
+        contain: layout paint;
+      }
+      .timeline-grid-table {
+        table-layout: fixed;
+      }
+      .timeline-grid-slot {
+        width: clamp(96px, calc((100cqw - 8rem) / var(--timeline-hours, 12)), 142px);
+        min-width: clamp(96px, calc((100cqw - 8rem) / var(--timeline-hours, 12)), 142px);
+      }
+      @supports not (width: 1cqw) {
+        .timeline-grid-slot {
+          width: clamp(96px, calc((100vw - 13.75rem) / var(--timeline-hours, 12)), 142px);
+          min-width: clamp(96px, calc((100vw - 13.75rem) / var(--timeline-hours, 12)), 142px);
+        }
+      }
+      @media (max-width: 640px) {
+        .timeline-grid-slot {
+          width: 112px;
+          min-width: 112px;
+        }
+      }
+      .timeline-grid-sticky {
+        transform: translateZ(0);
+        backface-visibility: hidden;
+        contain: paint;
+      }
+      .timeline-grid-cell {
+        contain: layout paint;
+      }
+      .timeline-grid-line {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+        overflow: hidden;
+        word-break: break-word;
+      }
+      .timeline-grid-purpose {
+        display: block;
+        max-width: 100%;
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+      }
+      .timeline-grid-purpose-track {
+        display: block;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .booking-it-neon,
         .booking-it-neon::after {
-          animation: none;
+          display: block;
+          max-width: 100%;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
       }
     </style>
   <script type="importmap">
 {
   "imports": {
-    "@google/genai": "https://esm.sh/@google/genai@^1.35.0",
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
     "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
     "react/": "https://esm.sh/react@^19.2.3/",
@@ -134,3 +210,4 @@
   <script type="module" src="/index.tsx"></script>
 </body>
 </html>
+

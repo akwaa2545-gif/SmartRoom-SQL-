@@ -91,7 +91,7 @@ const CheckInValidationModal: React.FC<CheckInValidationModalProps> = ({
                 inputMode="numeric"
                 autoFocus
                 className="w-full rounded-lg border border-slate-300 py-2.5 pl-9 pr-3 text-sm font-medium text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                placeholder={language === 'th' ? 'เช่น 1234' : 'e.g. 1234'}
+                placeholder={language === 'th' ? 'เช่น 2516' : 'e.g. 2516'}
               />
             </div>
           </div>

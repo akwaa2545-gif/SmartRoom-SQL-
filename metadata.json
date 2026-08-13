@@ -1,8 +1,6 @@
 {
-  "name": "Remix: Remix: YAGEO SmartRoom",
-  "description": "A modern meeting room booking system with AI-powered scheduling assistance. Manages Meeting rooms, Reception areas, and Training rooms.",
-  "requestFramePermissions": [],
-  "majorCapabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
+  "name": "TOKIN Smart Room",
+  "description": "A modern meeting room booking system for managing Meeting rooms, Reception areas, and Training rooms.",
+  "requestFramePermissions": []
 }
+

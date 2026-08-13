@@ -2,8 +2,9 @@ import React from 'react';
 import { Room, Booking, BookingStatus } from '../types';
 import { Users, Monitor, CalendarPlus } from 'lucide-react';
 import { TRANSLATIONS, formatTimeString, translateText, isRoomClosedAt, isRoomCurrentlyClosed } from '../translations';
-import { getBookingDepartmentClass } from '../bookingVisualStyles';
 import { BOOKING_START_HOUR, BOOKING_END_HOUR } from '../constants';
+import { BookingDisplayState, getBookingDisplayState as getSharedBookingDisplayState } from '../utils/bookingStatus';
+import { getBookingDepartmentBadgeClass, getBookingDepartmentClassForState, getBookingDepartmentDotClass } from '../bookingVisualStyles';
 
 interface RoomCardProps {
   room: Room;
@@ -18,20 +19,33 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, currentBookings, onBook, lang
   const temporarilyDisabledLabel = language === 'th' ? 'ปิดใช้งานชั่วคราว' : 'Temporarily Disabled';
   const checkInWindowTooltip = language === 'th'
     ? 'Check in ได้ภายใน 15 นาทีก่อนหรือหลังเวลาเริ่มจอง เช่น หากเริ่มเวลา 15:00 น. สามารถ Check in ได้ตั้งแต่ 14:45 น. ถึง 15:15 น.'
-    : 'Check in within 15 minutes before or after the booking start time. For example, if the booking starts at 3:00 PM, check-in is allowed from 2:45 PM to 3:15 PM.';
-  const isNoCheckIn = (booking: Booking) => booking.status === BookingStatus.NO_SHOW;
+    : 'Check in within 15 minutes before or after the booking start time. For example, if the booking starts at 15:00, check-in is allowed from 14:45 to 15:15.';
+  const getBookingDisplayState = (booking: Booking): BookingDisplayState => getSharedBookingDisplayState(booking, now);
 
-  // Find current active booking (ignore rejected)
-  const currentBooking = currentBookings.find(booking =>
-    booking.roomId === room.id &&
-    now >= booking.startTime &&
-    now <= booking.endTime &&
-    booking.status !== BookingStatus.REJECTED &&
-    !isNoCheckIn(booking)
-  );
+  const getBookingDisplayLabel = (booking: Booking) => {
+    const state = getBookingDisplayState(booking);
+    if (state === 'noCheckIn') return t.cancelledNoVerification;
+    if (state === 'pending') return t.pendingApproval;
+    if (state === 'waitForVerify') return t.waitForVerify;
+    if (state === 'verified') return t.verified;
+    if (state === 'roomInUse') return t.roomInUseStatus;
+    if (state === 'used') return t.usedRoomStatus;
+    return t.waitForVerify;
+  };
 
-  const isOccupied = !!currentBooking;
-  const isPending = currentBooking?.status === BookingStatus.PENDING;
+  const getBookingStatusBadgeClass = (state: BookingDisplayState, department?: string) => {
+    if (state === 'noCheckIn') return 'bg-rose-100 text-rose-800';
+    if (state === 'pending') return 'bg-orange-100 text-orange-800';
+
+    const departmentBadgeClass = department ? getBookingDepartmentBadgeClass(department) : '';
+    if (state === 'roomInUse') return 'bg-rose-500 text-white border border-rose-300 ring-2 ring-rose-100 shadow-md animate-pulse';
+    if (departmentBadgeClass) return departmentBadgeClass;
+    if (state === 'waitForVerify' || state === 'confirmed') return 'bg-amber-100 text-amber-900 border border-amber-250';
+    if (state === 'verified') return 'bg-cyan-100 text-cyan-800 border border-cyan-200';
+    if (state === 'used') return 'bg-slate-100 text-slate-600';
+    return 'bg-amber-100 text-amber-900';
+  };
+
 
   // Get upcoming bookings for this room TODAY only (Exclude rejected)
   const todaysBookings = currentBookings
@@ -54,9 +68,7 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, currentBookings, onBook, lang
   const formatHour = (hour?: number) => {
     const h = hour !== undefined ? hour : BOOKING_START_HOUR;
     if (language === 'en') {
-      const ampm = h >= 12 ? 'PM' : 'AM';
-      const displayHour = h % 12 || 12;
-      return `${displayHour}:00 ${ampm}`;
+      return `${String(h).padStart(2, '0')}:00`;
     }
     return `${String(h).padStart(2, '0')}:00 น.`;
   };
@@ -69,7 +81,7 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, currentBookings, onBook, lang
     return type;
   };
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md transition-shadow duration-300 flex flex-col h-full">
+    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 flex flex-col h-full">
       <div className="relative h-32 overflow-hidden p-4 flex flex-col justify-end z-0">
         {room.imageUrl ? (
           <>
@@ -122,18 +134,26 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, currentBookings, onBook, lang
             <p className="text-sm text-slate-400 italic">{t.noBookingsToday}</p>
           ) : (
             <div className="space-y-2">
-              {todaysBookings.slice(0, 2).map(booking => (
-                <div key={booking.id} className={`flex justify-between items-center text-sm rounded-lg px-2 py-1 bg-orange-50 border border-orange-200 ${getBookingDepartmentClass(booking.department)}`}>
-                  <div className="flex items-center truncate max-w-[140px]">
-                    <span className="w-2 h-2 rounded-full mr-2 flex-shrink-0 bg-orange-500"></span>
-                    <span className="text-orange-900 font-medium truncate">{translateText(booking.title, language)}</span>
-                    {isNoCheckIn(booking) && <span title={checkInWindowTooltip} className="ml-1.5 text-[9px] bg-rose-100 text-rose-700 px-1 py-0.5 rounded font-bold">{language === 'th' ? 'ไม่มา Check-in' : 'No Check-in'}</span>}
+              {todaysBookings.slice(0, 2).map(booking => {
+                const displayState = getBookingDisplayState(booking);
+                return (
+                  <div key={booking.id} className={`flex justify-between items-center gap-2 text-sm rounded-lg px-2 py-1 border ${getBookingDepartmentClassForState(displayState, booking.department)}`}>
+                    <div className="flex items-center truncate min-w-0">
+                      <span className={`w-2 h-2 rounded-full mr-2 flex-shrink-0 ${getBookingDepartmentDotClass(booking.department)}`}></span>
+                      <span className="font-medium truncate text-inherit">{translateText(booking.title, language)}</span>
+                      <span
+                        title={displayState === 'waitForVerify' || displayState === 'roomInUse' || displayState === 'noCheckIn' ? checkInWindowTooltip : undefined}
+                        className={`ml-1.5 text-[9px] px-1 py-0.5 rounded font-bold whitespace-nowrap ${getBookingStatusBadgeClass(displayState, booking.department)}`}
+                      >
+                        {getBookingDisplayLabel(booking)}
+                      </span>
+                    </div>
+                    <span className="text-slate-500 text-xs flex-shrink-0">
+                      {formatTimeString(getHHMM(booking.startTime), language)}
+                    </span>
                   </div>
-                  <span className="text-slate-500 text-xs flex-shrink-0">
-                    {formatTimeString(getHHMM(booking.startTime), language)}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
               {todaysBookings.length > 2 && <p className="text-xs text-slate-400">+{todaysBookings.length - 2} {t.more}</p>}
             </div>
           )}

@@ -2,20 +2,85 @@
   "functions": {
     "source": "functions"
   },
-  "hosting": {
-    "public": "dist",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ],
-    "rewrites": [
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
-    ]
-  },
+  "hosting": [
+    {
+      "site": "tokinsmartroom-495306",
+      "public": "dist",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ],
+      "headers": [
+        {
+          "source": "/**",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache, no-store, must-revalidate"
+            }
+          ]
+        },
+        {
+          "source": "/assets/**",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "public, max-age=31536000, immutable"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "site": "sutsmartbus-495306",
+      "public": "dist",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "redirects": [
+        {
+          "source": "/verify",
+          "destination": "https://tokinsmartroom-495306.web.app/verify",
+          "type": 301
+        },
+        {
+          "source": "**",
+          "destination": "https://tokinsmartroom-495306.web.app/",
+          "type": 301
+        }
+      ]
+    },
+    {
+      "site": "tokinsmartroom",
+      "public": "dist",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "redirects": [
+        {
+          "source": "/verify",
+          "destination": "https://tokinsmartroom-495306.web.app/verify",
+          "type": 301
+        },
+        {
+          "source": "**",
+          "destination": "https://tokinsmartroom-495306.web.app/",
+          "type": 301
+        }
+      ]
+    }
+  ],
   "firestore": [
     {
       "database": "ai-studio-28114784-a066-482c-9738-dfb6c9d68ce0",

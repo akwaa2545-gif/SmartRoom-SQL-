@@ -13,6 +13,11 @@ dist-ssr
 *.local
 .firebase/
 functions/.env
+portable-api/.env
+portable-api/secrets/
+portable-api/migration-backup-*.json
+portable-api/migration-backups/
+*-firebase-adminsdk-*.json
 
 # Editor directories and files
 .vscode/*

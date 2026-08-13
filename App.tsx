@@ -1,26 +1,32 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { AVAILABLE_ROOMS, INITIAL_BOOKINGS_MOCK, BOOKING_START_HOUR, BOOKING_END_HOUR } from './constants';
-import { Room, Booking, RoomType, BookingStatus, AdminUser, RoomMaintenanceRecord } from './types';
+import { AVAILABLE_ROOMS, INITIAL_BOOKINGS_MOCK, BOOKING_START_HOUR, BOOKING_END_HOUR, APP_BASE_URL } from './constants';
+import { Room, Booking, RoomType, BookingStatus, AdminUser, AdminRole, RoomMaintenanceRecord } from './types';
 import RoomCard from './components/RoomCard';
 import BookingModal from './components/BookingModal';
 import Dashboard from './components/Dashboard';
-import AdminPanel from './components/AdminPanel';
-import AIAssistant from './components/AIAssistant';
+import AnnouncementModal from './components/AnnouncementModal';
+import { DashboardSkeleton } from './components/SkeletonLoader';
+const AdminPanel = React.lazy(() => import('./components/AdminPanel'));
 import ConfirmationModal from './components/ConfirmationModal';
 import VerifyBookingPage from './components/VerifyBookingPage';
+import { LocalNetworkAccessGuide } from './components/LocalNetworkAccessGuide';
 import { TRANSLATIONS, getEffectiveRoomStatus, isRoomClosureExpired, isRoomClosedAt, isRoomCurrentlyClosed } from './translations';
 import { LayoutGrid, Calendar, BarChart3, Settings, Check, XCircle, AlertCircle, BookOpen, Menu, X } from 'lucide-react';
 import { TermsModal, AccessDeniedOverlay } from './components/TermsModal';
 import { UserGuideModal } from './components/UserGuideModal';
-import { collection, onSnapshot, setDoc, doc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { collection, onSnapshot, setDoc, doc, deleteDoc, updateDoc, serverTimestamp, query, where, deleteField } from 'firebase/firestore';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
 import { db, auth, functions, handleFirestoreError, OperationType, testFirestoreConnection } from './firebase';
+import { isBookingNoCheckIn, isBookingRoomInUse } from './utils/bookingStatus';
+import { createPortableBooking, getPortableBookings, getPortableMaintenanceHistory, getPortableRooms, isPortableMailApiEnabled, lookupPortableMailbox, requestPortableLocalNetworkAccess, sendPortableBookingVerificationEmail } from './utils/portableMailApi';
 
 type AppView = 'grid' | 'dashboard' | 'admin';
 type RouteMode = 'app' | 'verify';
 
 const USER_DEFAULT_VIEW: AppView = 'dashboard';
+const VERIFICATION_WINDOW_BEFORE_MS = 15 * 60 * 1000;
+const VERIFICATION_WINDOW_AFTER_MS = 15 * 60 * 1000;
 
 const isAdminRoutePath = (path?: string) => {
   const routePath = path ?? (typeof window !== 'undefined' ? window.location.pathname : '/');
@@ -41,6 +47,126 @@ const getRouteMode = (path?: string): RouteMode => {
 
 const isYageoEmail = (email?: string) => /^[^\s@]+@yageo\.com$/i.test((email || '').trim());
 
+const formatBookingTime = (date: Date, language: 'th' | 'en') => date.toLocaleTimeString(language === 'th' ? 'th-TH' : 'en-GB', {
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+
+const formatBookingDateLabel = (date: Date) => {
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${month}/${day}/${year}`;
+};
+
+const isFutureBookingDate = (date: Date) => {
+  const bookingDay = new Date(date);
+  bookingDay.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return bookingDay.getTime() > today.getTime();
+};
+
+const getBookingConfirmationMessage = (startTime: Date, language: 'th' | 'en', emailStatus?: 'queued' | 'sent') => {
+  const sendAt = new Date(startTime.getTime() - VERIFICATION_WINDOW_BEFORE_MS);
+  const windowStart = sendAt;
+  const windowEnd = new Date(startTime.getTime() + VERIFICATION_WINDOW_AFTER_MS);
+  const sendLabel = formatBookingTime(sendAt, language);
+  const windowStartLabel = formatBookingTime(windowStart, language);
+  const windowEndLabel = formatBookingTime(windowEnd, language);
+  const includeDate = isFutureBookingDate(startTime);
+  const dateLabel = formatBookingDateLabel(startTime);
+
+  if (language === 'th') {
+    const bookingMessage = 'ระบบทำการออกเลขและยืนยันการจองตารางเวลาของคุณเรียบร้อยแล้ว!';
+    const emailMessage = emailStatus === 'sent'
+      ? 'อีเมลยืนยันของคุณถูกส่งแล้ว'
+      : includeDate
+        ? `อีเมลยืนยันของคุณจะถูกส่งวันที่ ${dateLabel} เวลา ${sendLabel}`
+        : `อีเมลยืนยันของคุณจะถูกส่งเวลา ${sendLabel}`;
+    const confirmMessage = includeDate
+      ? `กรุณายืนยันวันที่ ${dateLabel} ระหว่าง ${windowStartLabel} - ${windowEndLabel}`
+      : `กรุณายืนยันระหว่าง ${windowStartLabel} - ${windowEndLabel}`;
+
+    return `${bookingMessage} ${emailMessage} ${confirmMessage} หากไม่ยืนยันภายในช่วงเวลานี้ ระบบจะยกเลิกการจองของคุณโดยอัตโนมัติ`;
+  }
+
+  const bookingMessage = 'Your booking number has been generated and your time slot has been confirmed successfully!';
+  const emailMessage = emailStatus === 'sent'
+    ? 'Your verification email has been sent.'
+    : includeDate
+      ? `Your verification email will be sent on ${dateLabel} at ${sendLabel}.`
+      : `Your verification email will be sent at ${sendLabel}.`;
+  const confirmMessage = includeDate
+    ? `Please confirm on ${dateLabel} between ${windowStartLabel} - ${windowEndLabel}.`
+    : `Please confirm between ${windowStartLabel} - ${windowEndLabel}.`;
+
+  return `${bookingMessage} ${emailMessage} ${confirmMessage} If you do not confirm within this time window, your booking will be automatically cancelled.`;
+};
+
+interface BookingConfirmationModalProps {
+  isOpen: boolean;
+  title: string;
+  message: string;
+  confirmText: string;
+  closeLabel: string;
+  onClose: () => void;
+}
+
+const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> = ({
+  isOpen,
+  title,
+  message,
+  confirmText,
+  closeLabel,
+  onClose,
+}) => {
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm animate-in fade-in duration-200"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="booking-confirmation-title"
+    >
+      <div className="relative w-full max-w-lg rounded-xl border border-emerald-100 bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+          aria-label={closeLabel}
+        >
+          <X className="h-5 w-5" />
+        </button>
+
+        <div className="pr-10">
+          <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+            <Check className="h-6 w-6" />
+          </div>
+          <h2 id="booking-confirmation-title" className="text-xl font-bold text-slate-950">
+            {title}
+          </h2>
+          <p className="mt-3 text-sm font-medium leading-6 text-slate-600">
+            {message}
+          </p>
+        </div>
+
+        <div className="mt-6 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl bg-brand-500 px-5 py-2.5 text-sm font-bold text-white shadow-md shadow-brand-100 transition-all hover:bg-brand-600 hover:shadow"
+          >
+            {confirmText}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const getStoredLanguage = (): 'th' | 'en' => {
   try {
     const saved = localStorage.getItem('smartroom_lang');
@@ -48,6 +174,57 @@ const getStoredLanguage = (): 'th' | 'en' => {
   } catch (e) {
     return 'th';
   }
+};
+
+const parseFirestoreDate = (value: any): Date | undefined => {
+  if (!value) return undefined;
+  const date = typeof value.toDate === 'function' ? value.toDate() : new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+};
+
+const normalizeStoredAdminRole = (role?: string | null): AdminRole => {
+  const normalized = String(role || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+  return normalized === 'SUPER_ADMIN' ? 'SUPER_ADMIN' : 'APPROVER';
+};
+
+const getStoredAdminUser = (): AdminUser | null => {
+  try {
+    const saved = localStorage.getItem('smartroom_admin_user');
+    if (!saved) return null;
+
+    const parsed = JSON.parse(saved) as Partial<AdminUser>;
+    if (!parsed || !parsed.id || !parsed.username) return null;
+
+    return {
+      id: String(parsed.id),
+      username: String(parsed.username),
+      password: parsed.password ? String(parsed.password) : '',
+      role: normalizeStoredAdminRole(parsed.role),
+      name: parsed.name,
+      employeeId: parsed.employeeId,
+      department: parsed.department,
+      phone: parsed.phone,
+    };
+  } catch (error) {
+    console.warn('Could not restore saved Admin session:', error);
+    return null;
+  }
+};
+
+const getAdminAuthPayload = (user: AdminUser) => ({
+  id: user.id,
+  firestoreDocId: user.id,
+  username: user.username,
+  password: user.password || '',
+  role: normalizeStoredAdminRole(user.role),
+});
+const getFirebaseErrorDetails = (error: unknown) => {
+  const maybeError = error as { code?: unknown; message?: unknown; details?: unknown };
+  return {
+    code: typeof maybeError?.code === 'string' ? maybeError.code : '',
+    message: error instanceof Error ? error.message : String(error),
+    details: maybeError?.details,
+  };
 };
 
 const SmartRoomApplication: React.FC = () => {
@@ -70,6 +247,17 @@ const SmartRoomApplication: React.FC = () => {
   }, [language]);
 
   const t = TRANSLATIONS[language];
+  const [dashboardActiveView, setDashboardActiveView] = useState<'status' | 'timeline'>('status');
+  const [portableNetworkReady, setPortableNetworkReady] = useState(() => !isPortableMailApiEnabled());
+
+  useEffect(() => {
+    if (!isPortableMailApiEnabled()) return;
+    let active = true;
+    void requestPortableLocalNetworkAccess().then((result) => {
+      if (active && result === 'granted') setPortableNetworkReady(true);
+    });
+    return () => { active = false; };
+  }, []);
 
   // --- DATABASE STATE (Real-time Firestore) ---
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -145,6 +333,7 @@ const SmartRoomApplication: React.FC = () => {
     }
     setCurrentView(view);
   };
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [selectedRoomId, setSelectedRoomId] = useState<string>('ALL');
   const [filterType, setFilterType] = useState<string>('All');
   const [preselectedDate, setPreselectedDate] = useState<string | undefined>(undefined);
@@ -197,7 +386,8 @@ const SmartRoomApplication: React.FC = () => {
   const [termsAccepted, setTermsAccepted] = useState<boolean | null>(null);
   const [isUserGuideOpen, setIsUserGuideOpen] = useState(false);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
-  
+  const [isAdminLoginModalOpen, setIsAdminLoginModalOpen] = useState(false);
+
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -210,8 +400,27 @@ const SmartRoomApplication: React.FC = () => {
     isOpen: false,
     title: '',
     message: '',
-    onConfirm: () => {},
+    onConfirm: () => { },
   });
+
+  const [bookingConfirmationModal, setBookingConfirmationModal] = useState<{
+    isOpen: boolean;
+    message: string;
+  }>({
+    isOpen: false,
+    message: '',
+  });
+
+  const showBookingConfirmationModal = (startTime: Date, emailStatus?: 'queued' | 'sent') => {
+    setBookingConfirmationModal({
+      isOpen: true,
+      message: getBookingConfirmationMessage(startTime, language, emailStatus),
+    });
+  };
+
+  const closeBookingConfirmationModal = () => {
+    setBookingConfirmationModal(prev => ({ ...prev, isOpen: false }));
+  };
 
   // --- TOAST NOTIFICATION STATE ---
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info'; isOpen: boolean }>({
@@ -259,6 +468,27 @@ const SmartRoomApplication: React.FC = () => {
 
   // 1. Subscribe to Rooms
   useEffect(() => {
+    if (isPortableMailApiEnabled()) {
+      let cancelled = false;
+      const loadRooms = async () => {
+        try {
+          const { rooms: sqlRooms } = await getPortableRooms();
+          if (!cancelled) {
+            setRooms(sqlRooms as Room[]);
+            setIsInitialLoading(false);
+          }
+        } catch (cause) {
+          console.error('SQL room load failed:', cause);
+          if (!cancelled) {
+            setRooms([]);
+            setIsInitialLoading(false);
+          }
+        }
+      };
+      void loadRooms();
+      const interval = window.setInterval(() => void loadRooms(), 60_000);
+      return () => { cancelled = true; window.clearInterval(interval); };
+    }
     const unsubscribe = onSnapshot(collection(db, 'rooms'), (snapshot) => {
       if (snapshot.empty) {
         const hasSeeded = localStorage.getItem('smartroom_rooms_seeded');
@@ -275,6 +505,7 @@ const SmartRoomApplication: React.FC = () => {
         } else {
           setRooms([]);
         }
+        setIsInitialLoading(false);
       } else {
         localStorage.setItem('smartroom_rooms_seeded', 'true');
         const loadedRooms: Room[] = [];
@@ -282,6 +513,7 @@ const SmartRoomApplication: React.FC = () => {
           loadedRooms.push(docSnap.data() as Room);
         });
         setRooms(loadedRooms);
+        setIsInitialLoading(false);
       }
     }, (error) => {
       // Firestore rules may not be deployed yet — fall back to local constants
@@ -290,6 +522,7 @@ const SmartRoomApplication: React.FC = () => {
       if (rooms.length === 0) {
         setRooms(AVAILABLE_ROOMS);
       }
+      setIsInitialLoading(false);
     });
 
     return () => unsubscribe();
@@ -297,6 +530,21 @@ const SmartRoomApplication: React.FC = () => {
 
   // 1.5 Subscribe to room maintenance history
   useEffect(() => {
+    if (isPortableMailApiEnabled()) {
+      let cancelled = false;
+      const loadHistory = async () => {
+        try {
+          const { history } = await getPortableMaintenanceHistory();
+          if (!cancelled) setMaintenanceHistory(history.map((record) => ({ ...record, createdAt: record.createdAt ? new Date(record.createdAt) : undefined })) as RoomMaintenanceRecord[]);
+        } catch (cause) {
+          console.error('SQL maintenance history load failed:', cause);
+          if (!cancelled) setMaintenanceHistory([]);
+        }
+      };
+      void loadHistory();
+      const interval = window.setInterval(() => void loadHistory(), 60_000);
+      return () => { cancelled = true; window.clearInterval(interval); };
+    }
     const unsubscribe = onSnapshot(collection(db, 'roomMaintenanceHistory'), (snapshot) => {
       const loadedRecords: RoomMaintenanceRecord[] = [];
       snapshot.forEach((docSnap) => {
@@ -315,12 +563,56 @@ const SmartRoomApplication: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  // 2. Subscribe to Bookings
+  // 2. Subscribe to Bookings (optimized to last 30 days to optimize client-side sync)
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, 'bookings'), (snapshot) => {
+    if (isPortableMailApiEnabled()) {
+      let cancelled = false;
+      const loadBookings = async () => {
+        try {
+          const { bookings: sqlBookings } = await getPortableBookings();
+          if (cancelled) return;
+          const loadedBookings = sqlBookings
+            .filter((booking) => !deletedBookingIdsRef.current.has(booking.id) && booking.status !== BookingStatus.NO_SHOW)
+            .map((booking) => ({
+              ...booking,
+              startTime: new Date(booking.startTime),
+              endTime: new Date(booking.endTime),
+              actualStartTime: booking.actualStartTime ? new Date(booking.actualStartTime) : undefined,
+              actualEndTime: booking.actualEndTime ? new Date(booking.actualEndTime) : undefined,
+              verifiedAt: booking.verifiedAt ? new Date(booking.verifiedAt) : undefined,
+              verificationEmailScheduledAt: booking.verificationEmailScheduledAt ? new Date(booking.verificationEmailScheduledAt) : undefined,
+              verificationWindowOpenedAt: booking.verificationWindowOpenedAt ? new Date(booking.verificationWindowOpenedAt) : undefined,
+              verificationWindowClosedAt: booking.verificationWindowClosedAt ? new Date(booking.verificationWindowClosedAt) : undefined,
+              verificationEmailNextRetryAt: booking.verificationEmailNextRetryAt ? new Date(booking.verificationEmailNextRetryAt) : undefined,
+              verificationEmailLastAttemptAt: booking.verificationEmailLastAttemptAt ? new Date(booking.verificationEmailLastAttemptAt) : undefined,
+              verificationEmailFailedAt: booking.verificationEmailFailedAt ? new Date(booking.verificationEmailFailedAt) : undefined,
+            } as Booking));
+          setBookings(loadedBookings);
+          setIsInitialLoading(false);
+        } catch (cause) {
+          console.error('SQL booking load failed:', cause);
+          if (!cancelled) {
+            setBookings([]);
+            setIsInitialLoading(false);
+          }
+        }
+      };
+      void loadBookings();
+      const interval = window.setInterval(() => void loadBookings(), 30_000);
+      return () => { cancelled = true; window.clearInterval(interval); };
+    }
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const bookingsQuery = query(
+      collection(db, 'bookings'),
+      where('endTime', '>=', thirtyDaysAgo)
+    );
+
+    const unsubscribe = onSnapshot(bookingsQuery, (snapshot) => {
       if (snapshot.empty) {
         const hasSeeded = localStorage.getItem('smartroom_bookings_seeded');
-        if (!hasSeeded) {
+        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        if (!hasSeeded && isLocal) {
           console.log("Bookings collection is empty, seeding defaults...");
           INITIAL_BOOKINGS_MOCK.forEach(async (b) => {
             try {
@@ -336,10 +628,9 @@ const SmartRoomApplication: React.FC = () => {
               console.error("Failed to seed booking to Firestore", b.id, e);
             }
           });
-          localStorage.setItem('smartroom_bookings_seeded', 'true');
-        } else {
-          setBookings([]);
         }
+        localStorage.setItem('smartroom_bookings_seeded', 'true');
+        setBookings([]);
       } else {
         localStorage.setItem('smartroom_bookings_seeded', 'true');
         const loadedBookings: Booking[] = [];
@@ -348,19 +639,28 @@ const SmartRoomApplication: React.FC = () => {
           if (deletedBookingIdsRef.current.has(docSnap.id)) return;
 
           const data = docSnap.data();
+          if (data.status === BookingStatus.NO_SHOW || data.status === 'MISSED_CHECK_IN') {
+            if (data.status === BookingStatus.NO_SHOW && !noShowRequestIdsRef.current.has(docSnap.id)) {
+              noShowRequestIdsRef.current.add(docSnap.id);
+              void markBookingNoShow(docSnap.id).catch((e) => {
+                console.error("Failed to archive existing NO_SHOW booking:", e);
+              });
+            }
+            return;
+          }
+
           const start = (data.startTime && typeof data.startTime.toDate === 'function')
             ? data.startTime.toDate()
             : new Date(data.startTime);
           const end = (data.endTime && typeof data.endTime.toDate === 'function')
             ? data.endTime.toDate()
             : new Date(data.endTime);
-          
-          const actualStart = (data.actualStartTime && typeof data.actualStartTime.toDate === 'function')
-            ? data.actualStartTime.toDate()
-            : (data.actualStartTime ? new Date(data.actualStartTime) : undefined);
-          const actualEnd = (data.actualEndTime && typeof data.actualEndTime.toDate === 'function')
-            ? data.actualEndTime.toDate()
-            : (data.actualEndTime ? new Date(data.actualEndTime) : undefined);
+
+          const actualStart = parseFirestoreDate(data.actualStartTime);
+          const actualEnd = parseFirestoreDate(data.actualEndTime);
+          const verificationEmailScheduledAt = parseFirestoreDate(data.verificationEmailScheduledAt);
+          const verificationWindowOpenedAt = parseFirestoreDate(data.verificationWindowOpenedAt);
+          const verificationWindowClosedAt = parseFirestoreDate(data.verificationWindowClosedAt);
 
           loadedBookings.push({
             ...data,
@@ -368,10 +668,14 @@ const SmartRoomApplication: React.FC = () => {
             startTime: start,
             endTime: end,
             actualStartTime: actualStart,
-            actualEndTime: actualEnd
+            actualEndTime: actualEnd,
+            verificationEmailScheduledAt,
+            verificationWindowOpenedAt,
+            verificationWindowClosedAt
           } as Booking);
         });
         setBookings(loadedBookings);
+        setIsInitialLoading(false);
       }
     }, (error) => {
       // Firestore rules may not be deployed yet — fall back to seeded local bookings
@@ -382,17 +686,21 @@ const SmartRoomApplication: React.FC = () => {
           ...b,
           startTime: b.startTime ? new Date(b.startTime) : new Date(),
           endTime: b.endTime ? new Date(b.endTime) : new Date(),
-          actualStartTime: b.actualStartTime ? new Date(b.actualStartTime) : undefined,
-          actualEndTime: b.actualEndTime ? new Date(b.actualEndTime) : undefined,
+          actualStartTime: parseFirestoreDate(b.actualStartTime),
+          actualEndTime: parseFirestoreDate(b.actualEndTime),
+          verificationEmailScheduledAt: parseFirestoreDate((b as any).verificationEmailScheduledAt),
+          verificationWindowOpenedAt: parseFirestoreDate((b as any).verificationWindowOpenedAt),
+          verificationWindowClosedAt: parseFirestoreDate((b as any).verificationWindowClosedAt),
         } as Booking));
         setBookings(fallbackBookings);
       }
+      setIsInitialLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
-  // 3. Mark bookings as NO_SHOW if they are not checked in within 15 minutes of scheduled start time
+  // 3. Archive and remove bookings that are not checked in within 15 minutes of scheduled start time.
   useEffect(() => {
     const checkAutoCancellation = async () => {
       const nowTime = new Date();
@@ -400,21 +708,20 @@ const SmartRoomApplication: React.FC = () => {
         if (b.status === BookingStatus.REJECTED || b.status === BookingStatus.NO_SHOW) return false;
         if (noShowRequestIdsRef.current.has(b.id)) return false;
         if (b.actualStartTime) return false; // Already checked in
-        
+
         const cutoffTime = new Date(b.startTime.getTime() + 15 * 60 * 1000);
         return nowTime > cutoffTime;
       });
 
       for (const booking of bookingsToCancel) {
-        console.log(`Marking booking ${booking.id} (${booking.title}) as NO_SHOW - not checked in within 15 minutes.`);
+        console.log(`Archiving missed check-in booking ${booking.id} (${booking.title}) after the allowed check-in window.`);
         noShowRequestIdsRef.current.add(booking.id);
         try {
           await markBookingNoShow(booking.id);
-          setBookings(prev => prev.map(b => (
-            b.id === booking.id ? { ...b, status: BookingStatus.NO_SHOW } : b
-          )));
+          deletedBookingIdsRef.current.add(booking.id);
+          setBookings(prev => prev.filter(b => b.id !== booking.id));
         } catch (e) {
-          console.error("Failed to update booking to NO_SHOW:", e);
+          console.error("Failed to archive missed check-in booking:", e);
           noShowRequestIdsRef.current.delete(booking.id);
         }
       }
@@ -431,16 +738,16 @@ const SmartRoomApplication: React.FC = () => {
       if (bookings.length === 0) return;
       const nowTime = new Date();
       const todayStart = new Date(nowTime.getFullYear(), nowTime.getMonth(), nowTime.getDate());
-      
+
       const pastIncomplete = bookings.filter(b => {
         const isBeforeToday = b.startTime < todayStart;
         if (!isBeforeToday) return false;
-        
+
         if (b.status === BookingStatus.NO_SHOW) return false;
         if (!b.actualStartTime) return false;
         return !b.actualEndTime;
       });
-      
+
       for (const b of pastIncomplete) {
         console.log(`Finalizing past incomplete booking ${b.id}`);
         try {
@@ -452,7 +759,7 @@ const SmartRoomApplication: React.FC = () => {
         }
       }
     };
-    
+
     finalizePastIncomplete();
   }, [bookings]);
 
@@ -520,53 +827,79 @@ const SmartRoomApplication: React.FC = () => {
     setTermsAccepted(false);
   };
 
+  const handleAdminLogoutToUserEntry = () => {
+    setAdminUser(null);
+    setTermsAccepted(null);
+    setIsAdminLoginModalOpen(false);
+    try {
+      localStorage.removeItem('smartroom_admin_user');
+      localStorage.removeItem('smartroom_terms_accepted');
+    } catch (e) {
+      console.error(e);
+    }
+    navigateToView(USER_DEFAULT_VIEW);
+  };
+
+  const handleAdminLoginSuccessFromUser = () => {
+    setIsAdminLoginModalOpen(false);
+    setIsMobileDrawerOpen(false);
+    navigateToView('admin');
+  };
+
+  const isMissedCheckInBooking = (booking: Booking, now: Date) => isBookingNoCheckIn(booking, now);
+
+  const activeBookings = useMemo(() => (
+    bookings.filter(booking => !isMissedCheckInBooking(booking, roomStatusNow))
+  ), [bookings, roomStatusNow]);
+
   const handleDeleteBooking = async (id: string) => {
     setConfirmModal({
       isOpen: true,
-      title: language === 'th' ? 'ยืนยันการลบการจอง' : 'Confirm Delete Booking',
+      title: 'Confirm Delete Booking',
       message: t.confirmDeleteBooking,
       isDanger: true,
-      confirmText: language === 'th' ? 'ลบข้อมูล' : 'Delete',
-      cancelText: language === 'th' ? 'ยกเลิก' : 'Cancel',
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
       onConfirm: async () => {
-        // Step 1: Remove immediately from local state and mark as deleted
-        // This prevents onSnapshot from restoring it even if Firebase delete fails
-        deletedBookingIdsRef.current.add(id);
-        setBookings(prev => prev.filter(b => b.id !== id));
-
-        // Step 2: Try to delete from Firebase in background
         try {
-          await deleteDoc(doc(db, 'bookings', id));
+          if (adminUser) {
+            const deleteBookingAsAdmin = httpsCallable(functions, 'deleteBookingAsAdmin');
+            await deleteBookingAsAdmin({
+              bookingId: id,
+              admin: getAdminAuthPayload(adminUser)
+            });
+          } else {
+            await deleteDoc(doc(db, 'bookings', id));
+          }
+          deletedBookingIdsRef.current.add(id);
+          setBookings(prev => prev.filter(b => b.id !== id));
           showNotification(
-            language === 'th' ? 'ลบข้อมูลการจองสำเร็จแล้ว' : 'Booking successfully deleted',
+            'Booking successfully deleted',
             'success'
           );
         } catch (e) {
-          const errMsg = e instanceof Error ? e.message : String(e);
-          const isPermissionDenied = errMsg.toLowerCase().includes('permission') || errMsg.toLowerCase().includes('missing or insufficient') || errMsg.toLowerCase().includes('firestore');
-          console.warn("Firestore delete failed (booking kept hidden locally):", errMsg);
-
-          if (isPermissionDenied) {
-            // UI already updated above — just show a soft warning
-            showNotification(
-              language === 'th'
-                ? 'ลบออกจากหน้าจอแล้ว (จะกลับมาหลัง Refresh — โปรด Deploy Firebase Rules)'
-                : 'Hidden from view (will reappear on refresh — please Deploy Firebase Rules)',
-              'info'
-            );
-          } else {
-            showNotification(
-              language === 'th' ? `ลบข้อมูลไม่สำเร็จ: ${errMsg}` : `Delete failed: ${errMsg}`,
-              'error'
-            );
-          }
+          const err = getFirebaseErrorDetails(e);
+          console.error('Delete failed', {
+            itemType: 'booking',
+            collection: 'bookings',
+            documentId: id,
+            code: err.code,
+            message: err.message,
+            details: err.details,
+          });
+          showNotification(
+            `Booking delete failed: ${err.message}`,
+            'error'
+          );
+          try {
+            handleFirestoreError(e, OperationType.DELETE, `bookings/${id}`);
+          } catch (loggingError) { }
         }
 
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
       }
     });
   };
-
   const handleUpdateBooking = async (id: string, updatedFields: Partial<Booking>) => {
     try {
       await updateDoc(doc(db, 'bookings', id), updatedFields);
@@ -577,7 +910,7 @@ const SmartRoomApplication: React.FC = () => {
       showNotification(language === 'th' ? `แก้ไขข้อมูลไม่สำเร็จ: ${e instanceof Error ? e.message : String(e)}` : `Update failed: ${e instanceof Error ? e.message : String(e)}`, 'error');
       try {
         handleFirestoreError(e, OperationType.UPDATE, `bookings/${id}`);
-      } catch (loggingError) {}
+      } catch (loggingError) { }
       return false;
     }
   };
@@ -593,7 +926,23 @@ const SmartRoomApplication: React.FC = () => {
       showNotification(language === 'th' ? `อนุมัติไม่สำเร็จ: ${e instanceof Error ? e.message : String(e)}` : `Approval failed: ${e instanceof Error ? e.message : String(e)}`, 'error');
       try {
         handleFirestoreError(e, OperationType.UPDATE, `bookings/${id}`);
-      } catch (loggingError) {}
+      } catch (loggingError) { }
+    }
+  };
+
+  const handleVerifyBooking = async (id: string) => {
+    try {
+      await updateDoc(doc(db, 'bookings', id), {
+        status: BookingStatus.VERIFIED,
+        verifiedAt: serverTimestamp(),
+        actualStartTime: serverTimestamp(),
+        actualEndTime: deleteField(),
+        verificationMethod: 'admin'
+      });
+      showNotification(language === 'th' ? 'ยืนยันการใช้งานห้องเรียบร้อยแล้ว' : 'Booking verified successfully', 'success');
+    } catch (e) {
+      console.error("Failed to verify booking:", e);
+      showNotification(language === 'th' ? `ยืนยันไม่สำเร็จ: ${e instanceof Error ? e.message : String(e)}` : `Verification failed: ${e instanceof Error ? e.message : String(e)}`, 'error');
     }
   };
 
@@ -616,7 +965,7 @@ const SmartRoomApplication: React.FC = () => {
           showNotification(language === 'th' ? `การปฏิเสธไม่สำเร็จ: ${e instanceof Error ? e.message : String(e)}` : `Rejection failed: ${e instanceof Error ? e.message : String(e)}`, 'error');
           try {
             handleFirestoreError(e, OperationType.UPDATE, `bookings/${id}`);
-          } catch (loggingError) {}
+          } catch (loggingError) { }
         }
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
       }
@@ -677,20 +1026,11 @@ const SmartRoomApplication: React.FC = () => {
     };
   };
 
-  const saveMaintenanceHistoryForRoom = async (room: Room) => {
-    const record = buildMaintenanceHistoryRecord(room);
-    if (!record) return;
-
+  const upsertMaintenanceHistoryRecord = (record: RoomMaintenanceRecord) => {
     setMaintenanceHistory(prev => {
       const withoutExisting = prev.filter(item => item.id !== record.id);
       return [...withoutExisting, record];
     });
-
-    try {
-      await setDoc(doc(db, 'roomMaintenanceHistory', record.id), record);
-    } catch (e) {
-      console.warn("Failed to persist room maintenance history; current room status was still saved:", e);
-    }
   };
 
   const withRoomMaintenanceHistory = (room: Room, record: RoomMaintenanceRecord | null): Room => {
@@ -705,15 +1045,67 @@ const SmartRoomApplication: React.FC = () => {
     };
   };
 
+  const getAdminSessionPayload = () => {
+    if (!adminUser) {
+      throw new Error(language === 'th' ? 'กรุณาเข้าสู่ระบบแอดมินอีกครั้ง' : 'Please sign in as Admin again.');
+    }
+
+    return {
+      id: adminUser.id,
+      firestoreDocId: (adminUser as any).firestoreDocId || adminUser.id,
+      username: adminUser.username,
+      password: adminUser.password || '',
+      role: adminUser.role
+    };
+  };
+
+  const serializeMaintenanceRecord = (record: RoomMaintenanceRecord | null) => {
+    if (!record) return null;
+    return {
+      id: record.id,
+      roomId: record.roomId,
+      roomName: record.roomName,
+      reason: record.reason,
+      startDate: record.startDate,
+      endDate: record.endDate,
+      startTime: record.startTime,
+      endTime: record.endTime
+    };
+  };
+
+  const saveRoomAsAdmin = async (room: Room, maintenanceRecord: RoomMaintenanceRecord | null) => {
+    const saveRoom = httpsCallable(functions, 'saveRoomAsAdmin');
+    await saveRoom({
+      admin: getAdminSessionPayload(),
+      room: {
+        id: room.id,
+        name: room.name,
+        type: room.type,
+        capacity: room.capacity,
+        amenities: room.amenities,
+        imageUrl: room.imageUrl,
+        isClosed: room.isClosed || false,
+        closureReason: room.closureReason || '',
+        closureStartDate: room.closureStartDate || '',
+        closureEndDate: room.closureEndDate || '',
+        closureStartTime: room.closureStartTime ?? BOOKING_START_HOUR,
+        closureEndTime: room.closureEndTime ?? BOOKING_END_HOUR
+      },
+      maintenanceRecord: serializeMaintenanceRecord(maintenanceRecord)
+    });
+  };
+
   const handleAddRoom = async (newRoom: Room) => {
     const historyRecord = buildMaintenanceHistoryRecord(newRoom);
     const roomToSave = withRoomMaintenanceHistory(newRoom, historyRecord);
     try {
-      await setDoc(doc(db, 'rooms', roomToSave.id), roomToSave);
+      await saveRoomAsAdmin(roomToSave, historyRecord);
+      if (historyRecord) {
+        upsertMaintenanceHistoryRecord(historyRecord);
+      }
     } catch (e) {
       handleFirestoreError(e, OperationType.CREATE, `rooms/${roomToSave.id}`);
     }
-    await saveMaintenanceHistoryForRoom(roomToSave);
   };
 
   const handleUpdateRoom = async (updatedRoom: Room) => {
@@ -722,71 +1114,111 @@ const SmartRoomApplication: React.FC = () => {
       ? buildMaintenanceHistoryRecord(updatedRoom)
       : previousRoom?.isClosed
         ? buildMaintenanceHistoryRecord({
-            ...previousRoom,
-            closureEndDate: previousRoom.closureEndDate || getLocalDateString(new Date())
-          })
+          ...previousRoom,
+          closureEndDate: previousRoom.closureEndDate || getLocalDateString(new Date())
+        })
         : null;
     const roomToSave = withRoomMaintenanceHistory(updatedRoom, closingRecord);
     try {
-      await setDoc(doc(db, 'rooms', roomToSave.id), roomToSave);
+      await saveRoomAsAdmin(roomToSave, closingRecord);
+      if (closingRecord) {
+        upsertMaintenanceHistoryRecord(closingRecord);
+      }
     } catch (e) {
       handleFirestoreError(e, OperationType.UPDATE, `rooms/${roomToSave.id}`);
-    }
-
-    if (roomToSave.isClosed) {
-      await saveMaintenanceHistoryForRoom(roomToSave);
-    } else if (closingRecord && previousRoom) {
-      await saveMaintenanceHistoryForRoom(withRoomMaintenanceHistory({
-        ...previousRoom,
-        closureEndDate: previousRoom.closureEndDate || getLocalDateString(new Date())
-      }, closingRecord));
     }
   };
 
   const handleDeleteRoom = async (id: string) => {
     setConfirmModal({
       isOpen: true,
-      title: language === 'th' ? 'ยืนยันการลบห้องประชุม' : 'Confirm Delete Room',
+      title: 'Confirm Delete Room',
       message: t.confirmDeleteRoom,
       isDanger: true,
-      confirmText: language === 'th' ? 'ลบห้อง' : 'Delete Room',
-      cancelText: language === 'th' ? 'ยกเลิก' : 'Cancel',
+      confirmText: 'Delete Room',
+      cancelText: 'Cancel',
       onConfirm: async () => {
+        const room = rooms.find(item => item.id === id);
         try {
-          await deleteDoc(doc(db, 'rooms', id));
-          // Clean up related bookings
-          const relatedBookings = bookings.filter(b => b.roomId === id);
-          for (const b of relatedBookings) {
-            await deleteDoc(doc(db, 'bookings', b.id));
-          }
+          const deleteRoomAsAdmin = httpsCallable(functions, 'deleteRoomAsAdmin');
+          await deleteRoomAsAdmin({ roomId: id });
+          setRooms(prev => prev.filter(item => item.id !== id));
+          setBookings(prev => prev.filter(booking => booking.roomId !== id));
+          showNotification(
+            `Room ${room?.name || id} deleted successfully`,
+            'success'
+          );
         } catch (e) {
-          handleFirestoreError(e, OperationType.DELETE, `rooms/${id}`);
+          const err = getFirebaseErrorDetails(e);
+          console.error('Delete failed', {
+            itemType: 'room',
+            collection: 'rooms',
+            documentId: id,
+            roomName: room?.name,
+            code: err.code,
+            message: err.message,
+            details: err.details,
+          });
+          showNotification(
+            `Room delete failed: ${err.message}`,
+            'error'
+          );
+          try {
+            handleFirestoreError(e, OperationType.DELETE, `rooms/${id}`);
+          } catch (loggingError) { }
         }
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
       }
     });
   };
-
   const sendVerificationEmail = async (bookingId: string, email?: string) => {
     if (!isYageoEmail(email)) {
-      return;
+      return null;
+    }
+
+    if (isPortableMailApiEnabled()) {
+      return sendPortableBookingVerificationEmail(bookingId, email!.trim().toLowerCase());
     }
 
     const sendEmail = httpsCallable(functions, 'sendBookingVerificationEmail');
-    await sendEmail({
-      bookingId,
-      email: email!.trim().toLowerCase(),
-      origin: window.location.origin,
-    });
+    const response = await sendEmail({ bookingId, email: email!.trim().toLowerCase(), appUrl: APP_BASE_URL });
+    return response.data as {
+      bookingId?: string;
+      scheduledAt?: string;
+      windowStart?: string;
+      windowEnd?: string;
+      sentAt?: string;
+      verifyUrl?: string;
+      status?: 'queued' | 'sent';
+    };
+  };
+
+  const verifyYageoMailbox = async (email: string) => {
+    const data = isPortableMailApiEnabled()
+      ? await lookupPortableMailbox(email)
+      : (await httpsCallable(functions, 'lookupYageoMailbox')({ email })).data as { exists?: boolean };
+
+    if (!data.exists) {
+      throw new Error('No active YAGEO mailbox matched this email address.');
+    }
   };
 
   const markBookingNoShow = async (bookingId: string) => {
+    if (isPortableMailApiEnabled()) {
+      return;
+    }
     const markNoShow = httpsCallable(functions, 'markBookingNoShow');
     await markNoShow({ bookingId });
   };
 
   const handleConfirmBooking = async (roomOrBookingData: any, optionalData?: { title: string; organizer: string; department: string; employeeId: string; date: string; selectedHours: number[] }): Promise<boolean> => {
     try {
+      if (isPortableMailApiEnabled() && !portableNetworkReady) {
+        showNotification(language === 'th'
+          ? 'ระบบยังไม่ถูกตั้งค่า คุณจะไม่สามารถจองห้องได้ กรุณาอนุญาตการเข้าถึงเครือข่ายภายในก่อน'
+          : 'The system is not configured. Please allow local network access before booking a room.', 'error');
+        return false;
+      }
       if (optionalData === undefined) {
         // Direct booking data passed from Dashboard inline booking form
         const bookingData = roomOrBookingData;
@@ -822,10 +1254,25 @@ const SmartRoomApplication: React.FC = () => {
           return false;
         }
 
+        const verificationWindowStart = new Date(bookingData.startTime.getTime() - VERIFICATION_WINDOW_BEFORE_MS);
+        const verificationWindowEnd = new Date(bookingData.startTime.getTime() + VERIFICATION_WINDOW_AFTER_MS);
+        const nowForVerification = new Date();
+        const nowForVerificationMs = nowForVerification.getTime();
+        if (nowForVerificationMs > verificationWindowEnd.getTime()) {
+          showNotification(
+            language === 'th'
+              ? 'ไม่สามารถสร้างการจองนี้ได้ เนื่องจากเลยช่วงเวลายืนยันแล้ว'
+              : 'This booking cannot be created because the verification window has already passed.',
+            'error'
+          );
+          return false;
+        }
+        const isInsideVerificationWindow = nowForVerificationMs >= verificationWindowStart.getTime() && nowForVerificationMs <= verificationWindowEnd.getTime();
+
         const newBookingId = Math.random().toString(36).substr(2, 9);
 
         // Check for double-bookings
-        const isOverlapping = bookings.some(b => 
+        const isOverlapping = activeBookings.some(b =>
           b.roomId === bookingData.roomId &&
           b.status !== BookingStatus.REJECTED &&
           b.startTime.getTime() < bookingData.endTime.getTime() &&
@@ -833,6 +1280,22 @@ const SmartRoomApplication: React.FC = () => {
         );
 
         if (isOverlapping) {
+          return false;
+        }
+
+        const normalizedBookingEmail = isYageoEmail(bookingData.email)
+          ? bookingData.email.trim().toLowerCase()
+          : '';
+        if (!normalizedBookingEmail) {
+          showNotification('Please enter a valid @yageo.com email address.', 'error');
+          return false;
+        }
+
+        try {
+          await verifyYageoMailbox(normalizedBookingEmail);
+        } catch (lookupError) {
+          console.error('YAGEO mailbox lookup failed:', lookupError);
+          showNotification('Cannot verify this YAGEO mailbox. Please check the email address.', 'error');
           return false;
         }
 
@@ -844,20 +1307,34 @@ const SmartRoomApplication: React.FC = () => {
           department: bookingData.department,
           employeeId: bookingData.employeeId,
           deskNumber: bookingData.deskNumber || '',
+          emailDisplayName: bookingData.emailDisplayName || '',
+          emailJobTitle: bookingData.emailJobTitle || '',
+          emailDepartment: bookingData.emailDepartment || '',
+          createdByUid: auth.currentUser?.uid || '',
           startTime: bookingData.startTime,
           endTime: bookingData.endTime,
           status: BookingStatus.CONFIRMED, // Automatically confirm new bookings
-          createdAt: new Date()
+          createdAt: new Date(),
+          verificationEmailStatus: isInsideVerificationWindow ? 'sending' : 'queued',
+          verificationEmailScheduledAt: verificationWindowStart,
+          verificationWindowOpenedAt: verificationWindowStart,
+          verificationWindowClosedAt: verificationWindowEnd
         };
 
-        if (isYageoEmail(bookingData.email)) {
-          newBooking.email = bookingData.email.trim().toLowerCase();
-        }
+        newBooking.email = normalizedBookingEmail;
 
+        if (isPortableMailApiEnabled()) {
+          const created = await createPortableBooking({ ...newBooking, startTime: newBooking.startTime.toISOString(), endTime: newBooking.endTime.toISOString() });
+          const portableBooking = { ...created.booking, startTime: new Date(String(created.booking.startTime)), endTime: new Date(String(created.booking.endTime)) } as Booking;
+          setBookings((previous) => [...previous, portableBooking]);
+          showBookingConfirmationModal(bookingData.startTime, created.status === 'sent' ? 'sent' : 'queued');
+          if (created.status === 'failed') showNotification('Booking was saved, but the verification email could not be sent. Please contact an administrator.', 'error');
+          return true;
+        }
         await setDoc(doc(db, 'bookings', newBookingId), newBooking);
         try {
-          await sendVerificationEmail(newBookingId, newBooking.email);
-          showNotification(t.bookingConfirmedOk, 'success');
+          const verificationInfo = await sendVerificationEmail(newBookingId, newBooking.email);
+          showBookingConfirmationModal(bookingData.startTime, verificationInfo?.status);
         } catch (emailError) {
           const emailFailure = {
             code: (emailError as any)?.code,
@@ -869,10 +1346,18 @@ const SmartRoomApplication: React.FC = () => {
             JSON.stringify(emailFailure, null, 2),
             emailError
           );
+          const isEmailSetupFailure = emailFailure.details?.missingEnv ||
+            emailFailure.details?.invalidEnv ||
+            emailFailure.details?.code === 'email-service-not-configured' ||
+            emailFailure.details?.code === 'email-service-invalid-url';
           showNotification(
-            language === 'th'
-              ? 'บันทึกการจองสำเร็จ แต่ส่งอีเมลยืนยันไม่สำเร็จ กรุณาตรวจสอบ Power Automate'
-              : `Booking saved, but the verification email could not be sent. ${emailFailure.code || 'Check Power Automate configuration.'}`,
+            isEmailSetupFailure
+              ? (language === 'th'
+                ? 'บันทึกการจองสำเร็จ แต่บริการส่งอีเมลยืนยันยังไม่ได้ตั้งค่า กรุณาติดต่อผู้ดูแลระบบ'
+                : 'Booking saved, but the verification email service is not configured. Please contact an administrator.')
+              : (language === 'th'
+                ? 'บันทึกการจองสำเร็จ แต่ส่งอีเมลยืนยันไม่สำเร็จ กรุณาติดต่อผู้ดูแลระบบ'
+                : 'Booking saved, but the verification email could not be sent. Please contact an administrator.'),
             'error'
           );
         }
@@ -896,7 +1381,7 @@ const SmartRoomApplication: React.FC = () => {
         }
 
         // Find all existing non-rejected bookings for this room on this date that haven't been checked in
-        const existingDateRoomBookings = bookings.filter(b => 
+        const existingDateRoomBookings = activeBookings.filter(b =>
           b.roomId === room.id &&
           b.status !== BookingStatus.REJECTED &&
           b.startTime < dayEnd &&
@@ -919,10 +1404,10 @@ const SmartRoomApplication: React.FC = () => {
         // Group selected hours into contiguous segments to create minimal bookings
         const sorted = [...data.selectedHours].sort((a, b) => a - b);
         const segments: { startHour: number; endHour: number }[] = [];
-        
+
         let currentStart = sorted[0];
         let currentEnd = sorted[0] + 1;
-        
+
         for (let i = 1; i < sorted.length; i++) {
           if (sorted[i] === currentEnd) {
             currentEnd = sorted[i] + 1;
@@ -953,11 +1438,18 @@ const SmartRoomApplication: React.FC = () => {
             createdAt: new Date()
           };
 
-          await setDoc(doc(db, 'bookings', newBookingId), newBooking);
+          if (isPortableMailApiEnabled()) {
+            const created = await createPortableBooking({ ...newBooking, startTime: start.toISOString(), endTime: end.toISOString() });
+            const portableBooking = { ...created.booking, startTime: new Date(String(created.booking.startTime)), endTime: new Date(String(created.booking.endTime)) } as Booking;
+            setBookings((previous) => [...previous, portableBooking]);
+          } else {
+            await setDoc(doc(db, 'bookings', newBookingId), newBooking);
+          }
         }
         setIsModalOpen(false);
         setSelectedRoom(null);
-        showNotification(t.bookingConfirmedOk, 'success');
+        const firstSegmentStart = new Date(y, m - 1, d, sorted[0], 0);
+        showBookingConfirmationModal(firstSegmentStart);
         return true;
       }
     } catch (e) {
@@ -966,38 +1458,51 @@ const SmartRoomApplication: React.FC = () => {
     }
   };
 
-  const filteredRooms = filterType === 'All' 
-    ? effectiveRooms 
+  const filteredRooms = filterType === 'All'
+    ? effectiveRooms
     : effectiveRooms.filter(room => room.type === filterType);
 
+  const currentActiveFilterType = useMemo(() => {
+    if (selectedRoomId === 'ALL') {
+      return filterType;
+    }
+    const selRoom = effectiveRooms.find(r => r.id === selectedRoomId);
+    return selRoom ? selRoom.type : filterType;
+  }, [selectedRoomId, filterType, effectiveRooms]);
+
   const stats = {
-      total: effectiveRooms.length,
-      available: effectiveRooms.filter(r => {
-          if (isRoomCurrentlyClosed(r, roomStatusNow)) return false;
-          return !bookings.some(b =>
-            b.roomId === r.id && 
-            roomStatusNow >= b.startTime && 
-            roomStatusNow <= b.endTime &&
-            b.status !== BookingStatus.REJECTED
-          )
-      }).length
+    total: effectiveRooms.length,
+    available: effectiveRooms.filter(r => {
+      if (isRoomCurrentlyClosed(r, roomStatusNow)) return false;
+      return !activeBookings.some(b =>
+        b.roomId === r.id &&
+        isBookingRoomInUse(b, roomStatusNow)
+      )
+    }).length
   };
 
   // Get bookings only for the currently selected room to pass to the modal (Exclude Rejected)
-  const selectedRoomBookings = selectedRoomForModal 
-    ? bookings.filter(b => b.roomId === selectedRoomForModal.id && b.status !== BookingStatus.REJECTED)
+  const selectedRoomBookings = selectedRoomForModal
+    ? activeBookings.filter(b => b.roomId === selectedRoomForModal.id && b.status !== BookingStatus.REJECTED)
     : [];
 
   if (currentView === 'admin') {
     return (
       <div className="min-h-screen bg-slate-50 p-6 md:p-8 overflow-y-auto">
-         <AdminPanel 
-            rooms={effectiveRooms} 
-            bookings={bookings} 
+        <React.Suspense fallback={
+          <div className="flex flex-col items-center justify-center min-h-[400px] text-slate-500 font-bold p-8 bg-white border border-slate-200 rounded-2xl shadow-sm">
+            <div className="w-10 h-10 border-4 border-brand-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+            <span>Loading Admin Panel...</span>
+          </div>
+        }>
+          <AdminPanel
+            rooms={effectiveRooms}
+            bookings={activeBookings}
             onDeleteBooking={handleDeleteBooking}
             onUpdateBooking={handleUpdateBooking}
             onApproveBooking={handleApproveBooking}
             onRejectBooking={handleRejectBooking}
+            onVerifyBooking={handleVerifyBooking}
             onAddRoom={handleAddRoom}
             onUpdateRoom={handleUpdateRoom}
             onDeleteRoom={handleDeleteRoom}
@@ -1006,63 +1511,86 @@ const SmartRoomApplication: React.FC = () => {
             showNotification={showNotification}
             currentUser={adminUser}
             setCurrentUser={setAdminUser}
-            onBackToUser={() => navigateToView('dashboard')}
-         />
-         {/* Toast message overlay for admin */}
-         {toast.isOpen && (
-           <div className="fixed bottom-6 right-6 z-[9999] animate-in fade-in slide-in-from-bottom-5 duration-300">
-             <div className={`p-4 rounded-xl shadow-lg border flex items-center space-x-3 text-sm font-semibold max-w-sm ${
-               toast.type === 'success' 
-                 ? 'bg-emerald-50 text-emerald-800 border-emerald-100' 
-                 : toast.type === 'error'
-                 ? 'bg-rose-50 text-rose-800 border-rose-100'
-                 : 'bg-slate-50 text-slate-800 border-slate-100'
-             }`}>
-               {toast.type === 'success' ? (
-                 <Check className="w-5 h-5 text-emerald-500 flex-shrink-0" />
-               ) : toast.type === 'error' ? (
-                 <XCircle className="w-5 h-5 text-rose-500 flex-shrink-0" />
-               ) : (
-                 <AlertCircle className="w-5 h-5 text-slate-500 flex-shrink-0" />
-               )}
-               <span className="flex-1">{toast.message}</span>
-               <button 
-                 type="button"
-                 onClick={() => setToast(prev => ({ ...prev, isOpen: false }))} 
-                 className="text-slate-400 hover:text-slate-600 font-bold px-1 text-md leading-none"
-               >
-                 ×
-               </button>
-             </div>
-           </div>
-         )}
+            onBackToUser={handleAdminLogoutToUserEntry}
+          />
+        </React.Suspense>
+        {/* Toast message overlay for admin */}
+        {toast.isOpen && (
+          <div className="fixed bottom-6 right-6 z-[9999] animate-in fade-in slide-in-from-bottom-5 duration-300">
+            <div className={`p-4 rounded-xl shadow-lg border flex items-center space-x-3 text-sm font-semibold max-w-sm ${toast.type === 'success'
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-100'
+              : toast.type === 'error'
+                ? 'bg-rose-50 text-rose-800 border-rose-100'
+                : 'bg-slate-50 text-slate-800 border-slate-100'
+              }`}>
+              {toast.type === 'success' ? (
+                <Check className="w-5 h-5 text-emerald-500 flex-shrink-0" />
+              ) : toast.type === 'error' ? (
+                <XCircle className="w-5 h-5 text-rose-500 flex-shrink-0" />
+              ) : (
+                <AlertCircle className="w-5 h-5 text-slate-500 flex-shrink-0" />
+              )}
+              <span className="flex-1">{toast.message}</span>
+              <button
+                type="button"
+                onClick={() => setToast(prev => ({ ...prev, isOpen: false }))}
+                className="text-slate-400 hover:text-slate-600 font-bold px-1 text-md leading-none"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
 
-         {/* ConfirmationModal must be here too — admin view is a separate early-return block */}
-         <ConfirmationModal
-           isOpen={confirmModal.isOpen}
-           title={confirmModal.title}
-           message={confirmModal.message}
-           confirmText={confirmModal.confirmText}
-           cancelText={confirmModal.cancelText}
-           isDanger={confirmModal.isDanger}
-           onConfirm={confirmModal.onConfirm}
-           onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
-         />
+        {/* ConfirmationModal must be here too — admin view is a separate early-return block */}
+        <ConfirmationModal
+          isOpen={confirmModal.isOpen}
+          title={confirmModal.title}
+          message={confirmModal.message}
+          confirmText={confirmModal.confirmText}
+          cancelText={confirmModal.cancelText}
+          isDanger={confirmModal.isDanger}
+          onConfirm={confirmModal.onConfirm}
+          onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        />
+
+        <BookingConfirmationModal
+          isOpen={bookingConfirmationModal.isOpen}
+          title={language === 'th' ? 'ยืนยันการจองสำเร็จ' : 'Booking confirmed'}
+          message={bookingConfirmationModal.message}
+          confirmText={language === 'th' ? 'ยืนยัน' : 'Confirm'}
+          closeLabel={language === 'th' ? 'ปิดข้อความยืนยันการจอง' : 'Close booking confirmation'}
+          onClose={closeBookingConfirmationModal}
+        />
       </div>
     );
   }
 
   if (termsAccepted === false) {
     return (
-      <AccessDeniedOverlay 
-        language={language} 
-        onReview={() => setTermsAccepted(null)} 
+      <AccessDeniedOverlay
+        language={language}
+        onReview={() => setTermsAccepted(null)}
       />
     );
   }
 
+  const announcementPage = currentView === 'grid'
+    ? 'grid'
+    : dashboardActiveView === 'timeline'
+      ? 'timeline'
+      : 'status';
+  const announcementAudience = adminUser ? 'logged_in' : 'guests';
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
+      <LocalNetworkAccessGuide onAccessGranted={() => setPortableNetworkReady(true)} />
+      <AnnouncementModal
+        page={announcementPage}
+        audience={announcementAudience}
+        language={language}
+      />
+
       <button
         type="button"
         onClick={() => setIsMobileDrawerOpen(true)}
@@ -1084,181 +1612,199 @@ const SmartRoomApplication: React.FC = () => {
       {/* Sidebar Navigation */}
       <aside className={`fixed inset-y-0 left-0 z-50 w-80 max-w-[85vw] bg-white border-r border-slate-200 flex-shrink-0 flex flex-col transform transition-transform duration-300 ease-out md:sticky md:top-0 md:z-10 md:h-screen md:w-64 md:max-w-none md:translate-x-0 ${isMobileDrawerOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
         <div className="p-6">
-            <div className="mb-4 flex justify-end md:hidden">
-                <button
-                    type="button"
-                    onClick={() => setIsMobileDrawerOpen(false)}
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-                    aria-label={language === 'th' ? 'ปิดเมนู' : 'Close menu'}
-                >
-                    <X className="h-5 w-5" />
-                </button>
-            </div>
-            <div 
-                onClick={() => {
-                  if (adminUser) {
-                    showNotification(language === 'th' ? 'กรุณาออกจากระบบก่อนกลับไปหน้าผู้ใช้งาน' : 'Please log out before returning to User mode', 'info');
-                    return;
-                  }
-                  navigateToView('dashboard');
-                  setSelectedRoomId('ALL');
-                  setFilterType('All');
-                  setIsMobileDrawerOpen(false);
-                }}
-                className={`flex items-center space-x-2 text-brand-500 mb-6 transition-all ${adminUser ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:opacity-85 active:scale-[0.99]'}`}
+          <div className="mb-4 flex justify-end md:hidden">
+            <button
+              type="button"
+              onClick={() => setIsMobileDrawerOpen(false)}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+              aria-label={language === 'th' ? 'ปิดเมนู' : 'Close menu'}
             >
-                <LayoutGrid className="w-8 h-8" />
-                <span className="text-xl font-bold tracking-tight">YAGEO SmartRoom</span>
-            </div>
-
-            {/* Language Switcher */}
-            <div className="flex bg-slate-100 p-1 rounded-lg mb-6 border border-slate-200 shadow-sm">
-                <button 
-                    onClick={() => setLanguage('en')}
-                    className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all ${language === 'en' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                >
-                    English
-                </button>
-                <button 
-                    onClick={() => setLanguage('th')}
-                    className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all ${language === 'th' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                >
-                    ภาษาไทย
-                </button>
-            </div>
-
-            <div className="space-y-6">
-                <div>
-                    <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">{t.menu}</h3>
-                    <div className="space-y-1">
-                        <button 
-                            onClick={() => {
-                              if (adminUser) {
-                                showNotification(language === 'th' ? 'กรุณาออกจากระบบก่อนกลับไปหน้าผู้ใช้งาน' : 'Please log out before returning to User mode', 'info');
-                                return;
-                              }
-                              navigateToView('dashboard');
-                              setSelectedRoomId('ALL');
-                              setIsMobileDrawerOpen(false);
-                            }}
-                            className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center space-x-3 ${currentView === 'dashboard' ? 'bg-brand-50 text-brand-700' : 'text-slate-600 hover:bg-slate-50'} ${adminUser ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                        >
-                            <LayoutGrid className="w-5 h-5" />
-                            <span>{language === 'th' ? 'ภาพรวมและแดชบอร์ด' : 'Overview & Dashboard'}</span>
-                        </button>
-                        
-                        <button 
-                            type="button"
-                            onClick={() => {
-                              setIsUserGuideOpen(true);
-                              setIsMobileDrawerOpen(false);
-                            }}
-                            className="w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center space-x-3 text-slate-600 hover:bg-slate-50 cursor-pointer"
-                        >
-                            <BookOpen className="w-5 h-5" />
-                            <span>{t.userGuideBtn}</span>
-                        </button>
-                    </div>
-                </div>
-
-                {currentView === 'dashboard' && (
-                    <div className="animate-in fade-in slide-in-from-left-2 duration-300">
-                        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">{t.filterRooms}</h3>
-                        <div className="space-y-1">
-                            <button 
-                                onClick={() => {
-                                  setFilterType('All');
-                                  setIsMobileDrawerOpen(false);
-                                }}
-                                className={`w-full text-left px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-between ${filterType === 'All' ? 'text-slate-900 bg-slate-100' : 'text-slate-500 hover:text-slate-900'}`}
-                            >
-                                <span>{t.allRoomsSelector}</span>
-                                <span className="bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded text-[10px]">{effectiveRooms.length}</span>
-                            </button>
-                            <button 
-                                onClick={() => {
-                                  setFilterType(RoomType.MEETING);
-                                  setIsMobileDrawerOpen(false);
-                                }}
-                                className={`w-full text-left px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-between ${filterType === RoomType.MEETING ? 'text-slate-900 bg-slate-100' : 'text-slate-500 hover:text-slate-900'}`}
-                            >
-                                <span>{t.meetingRoom}</span>
-                                <span className="bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded text-[10px]">{effectiveRooms.filter(r => r.type === RoomType.MEETING).length}</span>
-                            </button>
-                            <button 
-                                onClick={() => {
-                                  setFilterType(RoomType.RECEPTION);
-                                  setIsMobileDrawerOpen(false);
-                                }}
-                                className={`w-full text-left px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-between ${filterType === RoomType.RECEPTION ? 'text-slate-900 bg-slate-100' : 'text-slate-500 hover:text-slate-900'}`}
-                            >
-                                <span>{t.receptionArea}</span>
-                                <span className="bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded text-[10px]">{effectiveRooms.filter(r => r.type === RoomType.RECEPTION).length}</span>
-                            </button>
-                            <button 
-                                onClick={() => {
-                                  setFilterType(RoomType.TRAINING);
-                                  setIsMobileDrawerOpen(false);
-                                }}
-                                className={`w-full text-left px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-between ${filterType === RoomType.TRAINING ? 'text-slate-900 bg-slate-100' : 'text-slate-500 hover:text-slate-900'}`}
-                            >
-                                <span>{t.trainingRoom}</span>
-                                <span className="bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded text-[10px]">{effectiveRooms.filter(r => r.type === RoomType.TRAINING).length}</span>
-                            </button>
-                        </div>
-                    </div>
-                )}
-            </div>
-        </div>
-
-        {/* Admin Link at bottom */}
-        <div className="p-6 mt-auto border-t border-slate-200">
-             <button 
-                onClick={() => {
-                  navigateToView('admin');
-                  setIsMobileDrawerOpen(false);
-                }}
-                className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center space-x-3 ${currentView === 'admin' ? 'bg-brand-50 text-brand-700' : 'text-slate-600 hover:bg-slate-50'}`}
-            >
-                <Settings className="w-5 h-5" />
-                <span>{t.adminPanel}</span>
+              <X className="h-5 w-5" />
             </button>
+          </div>
+          <div
+            onClick={() => {
+              navigateToView('dashboard');
+              setDashboardActiveView('status');
+              setSelectedRoomId('ALL');
+              setFilterType('All');
+              setIsMobileDrawerOpen(false);
+            }}
+            className="flex items-center space-x-3 text-brand-500 mb-6 transition-all cursor-pointer hover:opacity-85 active:scale-[0.99]"
+          >
+            <img src="/favicon.png" alt="TOKIN Smart Room Logo" className="w-9 h-9 object-contain" />
+            <div className="flex flex-col">
+              <span className="text-xl font-extrabold tracking-tight leading-none text-brand-500">TOKIN</span>
+              <span className="text-xs font-bold tracking-wider text-slate-400 mt-1">Smart Room</span>
+            </div>
+          </div>
+
+          {/* Language Switcher */}
+          <div className="flex bg-slate-100 p-1 rounded-lg mb-6 border border-slate-200 shadow-sm">
+            <button
+              onClick={() => setLanguage('en')}
+              className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all ${language === 'en' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+              English
+            </button>
+            <button
+              onClick={() => setLanguage('th')}
+              className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all ${language === 'th' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+              ภาษาไทย
+            </button>
+          </div>
+
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">{t.menu}</h3>
+              <div className="space-y-1">
+                <button
+                  onClick={() => {
+                    navigateToView('dashboard');
+                    setDashboardActiveView('status');
+                    setSelectedRoomId('ALL');
+                    setIsMobileDrawerOpen(false);
+                  }}
+                  className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center space-x-3 ${currentView === 'dashboard' ? 'bg-brand-50 text-brand-700' : 'text-slate-600 hover:bg-slate-50'} cursor-pointer`}
+                >
+                  <LayoutGrid className="w-5 h-5" />
+                  <span>{language === 'th' ? 'แดชบอร์ด' : 'Dashboard'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsUserGuideOpen(true);
+                    setIsMobileDrawerOpen(false);
+                  }}
+                  className="w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center space-x-3 text-slate-600 hover:bg-slate-50 cursor-pointer"
+                >
+                  <BookOpen className="w-5 h-5" />
+                  <span>{t.userGuideBtn}</span>
+                </button>
+              </div>
+            </div>
+
+            {currentView === 'dashboard' && (
+              <div className="animate-in fade-in slide-in-from-left-2 duration-300">
+                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">{t.filterRooms}</h3>
+                <div className="space-y-1">
+                  <button
+                    onClick={() => {
+                      setFilterType('All');
+                      setSelectedRoomId('ALL');
+                      setIsMobileDrawerOpen(false);
+                    }}
+                    className={`w-full text-left px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-between ${selectedRoomId === 'ALL' && filterType === 'All' ? 'text-slate-900 bg-slate-100' : 'text-slate-500 hover:text-slate-900'}`}
+                  >
+                    <span>{t.allRoomsSelector}</span>
+                    <span className="bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded text-[10px]">{effectiveRooms.length}</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setFilterType(RoomType.MEETING);
+                      if (selectedRoomId !== 'ALL') {
+                        const firstRoom = effectiveRooms.find(r => r.type === RoomType.MEETING);
+                        if (firstRoom) setSelectedRoomId(firstRoom.id);
+                      }
+                      setIsMobileDrawerOpen(false);
+                    }}
+                    className={`w-full text-left px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-between ${currentActiveFilterType === RoomType.MEETING ? 'text-slate-900 bg-slate-100' : 'text-slate-500 hover:text-slate-900'}`}
+                  >
+                    <span>{t.meetingRoom}</span>
+                    <span className="bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded text-[10px]">{effectiveRooms.filter(r => r.type === RoomType.MEETING).length}</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setFilterType(RoomType.RECEPTION);
+                      if (selectedRoomId !== 'ALL') {
+                        const firstRoom = effectiveRooms.find(r => r.type === RoomType.RECEPTION);
+                        if (firstRoom) setSelectedRoomId(firstRoom.id);
+                      }
+                      setIsMobileDrawerOpen(false);
+                    }}
+                    className={`w-full text-left px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-between ${currentActiveFilterType === RoomType.RECEPTION ? 'text-slate-900 bg-slate-100' : 'text-slate-500 hover:text-slate-900'}`}
+                  >
+                    <span>{t.receptionArea}</span>
+                    <span className="bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded text-[10px]">{effectiveRooms.filter(r => r.type === RoomType.RECEPTION).length}</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setFilterType(RoomType.TRAINING);
+                      if (selectedRoomId !== 'ALL') {
+                        const firstRoom = effectiveRooms.find(r => r.type === RoomType.TRAINING);
+                        if (firstRoom) setSelectedRoomId(firstRoom.id);
+                      }
+                      setIsMobileDrawerOpen(false);
+                    }}
+                    className={`w-full text-left px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-between ${currentActiveFilterType === RoomType.TRAINING ? 'text-slate-900 bg-slate-100' : 'text-slate-500 hover:text-slate-900'}`}
+                  >
+                    <span>{t.trainingRoom}</span>
+                    <span className="bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded text-[10px]">{effectiveRooms.filter(r => r.type === RoomType.TRAINING).length}</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="px-6 py-6 border-t border-slate-100 hidden md:block">
+          <div className="px-6 py-6 border-t border-slate-100 hidden md:block">
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">{t.liveStatus}</h3>
             <div className="space-y-3">
-                <div className="flex justify-between items-center text-sm">
-                    <span className="text-slate-600">{t.totalRooms}</span>
-                    <span className="font-semibold text-slate-900">{stats.total}</span>
-                </div>
-                <div className="flex justify-between items-center text-sm">
-                    <span className="text-slate-600">{t.availableNow}</span>
-                    <span className="font-semibold text-green-600">{stats.available}</span>
-                </div>
-                <div className="flex justify-between items-center text-sm">
-                    <span className="text-slate-600">{t.occupied}</span>
-                    <span className="font-semibold text-red-600">{stats.total - stats.available}</span>
-                </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-slate-600">{t.totalRooms}</span>
+                <span className="font-semibold text-slate-900">{stats.total}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-slate-600">{t.availableNow}</span>
+                <span className="font-semibold text-green-600">{stats.available}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-slate-600">{t.occupied}</span>
+                <span className="font-semibold text-red-600">{stats.total - stats.available}</span>
+              </div>
             </div>
+          </div>
+        <div className="p-6 mt-auto border-t border-slate-200">
+          <button
+            onClick={() => {
+              if (adminUser) {
+                navigateToView('admin');
+              } else {
+                setIsAdminLoginModalOpen(true);
+              }
+              setIsMobileDrawerOpen(false);
+            }}
+            className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center space-x-3 ${currentView === 'admin' ? 'bg-brand-50 text-brand-700' : 'text-slate-600 hover:bg-slate-50'} cursor-pointer`}
+          >
+            <Settings className="w-5 h-5" />
+            <span>{t.adminPanel}</span>
+          </button>
         </div>
+
       </aside>
 
       {/* Main Content */}
       <main className="flex-1 p-6 pt-20 md:p-8 overflow-y-auto">
 
         {currentView === 'dashboard' && (
-             <Dashboard 
-                rooms={filteredRooms} 
-                bookings={bookings} 
-                maintenanceHistory={maintenanceHistory}
-                language={language} 
-                onDeleteBooking={handleDeleteBooking} 
-                onConfirmBooking={handleConfirmBooking}
-                onUpdateBooking={handleUpdateBooking}
-                selectedRoomId={selectedRoomId}
-                setSelectedRoomId={setSelectedRoomId}
-             />
+          isInitialLoading ? (
+            <DashboardSkeleton />
+          ) : (
+            <Dashboard
+              rooms={filteredRooms}
+              bookings={activeBookings}
+              maintenanceHistory={maintenanceHistory}
+              language={language}
+              onDeleteBooking={handleDeleteBooking}
+              onConfirmBooking={handleConfirmBooking}
+              selectedRoomId={selectedRoomId}
+              setSelectedRoomId={setSelectedRoomId}
+              activeView={dashboardActiveView}
+              onActiveViewChange={setDashboardActiveView}
+            />
+          )
         )}
       </main>
 
@@ -1276,6 +1822,15 @@ const SmartRoomApplication: React.FC = () => {
         onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
       />
 
+      <BookingConfirmationModal
+        isOpen={bookingConfirmationModal.isOpen}
+        title={language === 'th' ? 'ยืนยันการจองสำเร็จ' : 'Booking confirmed'}
+        message={bookingConfirmationModal.message}
+        confirmText={language === 'th' ? 'ยืนยัน' : 'Confirm'}
+        closeLabel={language === 'th' ? 'ปิดข้อความยืนยันการจอง' : 'Close booking confirmation'}
+        onClose={closeBookingConfirmationModal}
+      />
+
       {/* Booking Modal */}
       <BookingModal
         room={selectedRoomForModal}
@@ -1288,24 +1843,57 @@ const SmartRoomApplication: React.FC = () => {
         initialHours={preselectedHours}
       />
 
-      {/* AI Assistant */}
-      <AIAssistant 
-        currentBookings={bookings} 
-        rooms={effectiveRooms} 
-        language={language} 
-        onBookRoom={handleBookRoom}
-      />
+      {isAdminLoginModalOpen && (
+        <div
+          className="fixed inset-0 z-[9998] flex items-center justify-center bg-slate-900/50 p-4 animate-in fade-in duration-200"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setIsAdminLoginModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm animate-in zoom-in-95 slide-in-from-bottom-2 duration-200"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <React.Suspense fallback={
+              <div className="w-full max-w-sm bg-white border border-slate-200 rounded-2xl shadow-xl p-8 flex flex-col items-center justify-center min-h-[300px]">
+                <div className="w-8 h-8 border-3 border-brand-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                <span className="text-slate-500 font-bold text-sm">Loading Login...</span>
+              </div>
+            }>
+              <AdminPanel
+                rooms={effectiveRooms}
+                bookings={activeBookings}
+                onDeleteBooking={handleDeleteBooking}
+                onUpdateBooking={handleUpdateBooking}
+                onApproveBooking={handleApproveBooking}
+                onRejectBooking={handleRejectBooking}
+                onVerifyBooking={handleVerifyBooking}
+                onAddRoom={handleAddRoom}
+                onUpdateRoom={handleUpdateRoom}
+                onDeleteRoom={handleDeleteRoom}
+                language={language}
+                setLanguage={setLanguage}
+                showNotification={showNotification}
+                currentUser={null}
+                setCurrentUser={setAdminUser}
+                loginPresentation="modal"
+                onCancelLogin={() => setIsAdminLoginModalOpen(false)}
+                onLoginSuccess={handleAdminLoginSuccessFromUser}
+              />
+            </React.Suspense>
+          </div>
+        </div>
+      )}
 
       {/* Modern custom safe Toast message overlay */}
       {toast.isOpen && (
         <div className="fixed bottom-6 right-6 z-[9999] animate-in fade-in slide-in-from-bottom-5 duration-300">
-          <div className={`p-4 rounded-xl shadow-lg border flex items-center space-x-3 text-sm font-semibold max-w-sm ${
-            toast.type === 'success' 
-              ? 'bg-emerald-50 text-emerald-800 border-emerald-100' 
-              : toast.type === 'error'
+          <div className={`p-4 rounded-xl shadow-lg border flex items-center space-x-3 text-sm font-semibold max-w-sm ${toast.type === 'success'
+            ? 'bg-emerald-50 text-emerald-800 border-emerald-100'
+            : toast.type === 'error'
               ? 'bg-rose-50 text-rose-800 border-rose-100'
               : 'bg-slate-50 text-slate-800 border-slate-100'
-          }`}>
+            }`}>
             {toast.type === 'success' ? (
               <Check className="w-5 h-5 text-emerald-500 flex-shrink-0" />
             ) : toast.type === 'error' ? (
@@ -1314,9 +1902,9 @@ const SmartRoomApplication: React.FC = () => {
               <AlertCircle className="w-5 h-5 text-slate-500 flex-shrink-0" />
             )}
             <span className="flex-1">{toast.message}</span>
-            <button 
+            <button
               type="button"
-              onClick={() => setToast(prev => ({ ...prev, isOpen: false }))} 
+              onClick={() => setToast(prev => ({ ...prev, isOpen: false }))}
               className="text-slate-400 hover:text-slate-600 font-bold px-1 text-md leading-none"
             >
               ×
@@ -1326,7 +1914,7 @@ const SmartRoomApplication: React.FC = () => {
       )}
       {/* Terms Agreement Overlay */}
       {termsAccepted === null && (
-        <TermsModal 
+        <TermsModal
           language={language}
           setLanguage={setLanguage}
           rooms={effectiveRooms}
@@ -1337,7 +1925,7 @@ const SmartRoomApplication: React.FC = () => {
 
       {/* User Guide Manual Overlay */}
       {isUserGuideOpen && (
-        <UserGuideModal 
+        <UserGuideModal
           language={language}
           rooms={effectiveRooms}
           onClose={() => setIsUserGuideOpen(false)}

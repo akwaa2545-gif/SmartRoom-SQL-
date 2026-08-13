@@ -1,0 +1,15 @@
+{
+  "name": "smartroom-portable-api",
+  "private": true,
+  "version": "1.0.0",
+  "main": "src/server.js",
+  "engines": { "node": ">=20 <25" },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "mssql": "^11.0.1"
+  }
+}

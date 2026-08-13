@@ -16,33 +16,23 @@ service cloud.firestore {
       return isSignedIn() && request.auth.token.email_verified == true;
     }
 
+    function hasSuperAdminRole(role) {
+      return role == "SUPER_ADMIN" || role == "super_admin";
+    }
+
     function isSuperAdmin() {
       return isSignedIn() && (
         request.auth.token.super_admin == true ||
-        request.auth.token.role == "SUPER_ADMIN" ||
-        request.auth.token.email == "phooriwat456@gmail.com" ||
-        (
-          exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
-          get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == "SUPER_ADMIN"
-        ) ||
-        (
-          request.auth.token.email is string &&
-          exists(/databases/$(database)/documents/admins/$(request.auth.token.email)) &&
-          get(/databases/$(database)/documents/admins/$(request.auth.token.email)).data.role == "SUPER_ADMIN"
-        )
+        hasSuperAdminRole(request.auth.token.role) ||
+        request.auth.token.email == "phooriwat456@gmail.com"
       );
     }
 
     function isAdmin() {
-      return isSuperAdmin() || (
-        isSignedIn() && (
-          exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
-          request.auth.token.email == "phooriwat456@gmail.com" ||
-          (
-            request.auth.token.email is string &&
-            exists(/databases/$(database)/documents/admins/$(request.auth.token.email))
-          )
-        )
+      return isSignedIn() && (
+        isSuperAdmin() ||
+        request.auth.token.role == "APPROVER" ||
+        request.auth.token.role == "approver"
       );
     }
 
@@ -54,8 +44,8 @@ service cloud.firestore {
       return request.resource.data;
     }
 
-    function bangkokHour(timestamp) {
-      return (timestamp.hours() + 7) % 24;
+    function bangkokHour(value) {
+      return (value.hours() + 7) % 24;
     }
 
     function isWithinBookingHours(data) {
@@ -66,6 +56,10 @@ service cloud.firestore {
              data.startTime.seconds() == 0 &&
              data.endTime.minutes() == 0 &&
              data.endTime.seconds() == 0;
+    }
+
+    function isVerificationWindowStillOpen(data) {
+      return request.time <= data.startTime + duration.value(15, 'm');
     }
 
     // Base validation helper for Room items
@@ -130,6 +124,7 @@ service cloud.firestore {
       allow create: if (bookingId in ['b1', 'b2'] && isValidId(bookingId) && incoming().id == bookingId) ||
                        (isValidId(bookingId) && 
                         isValidBooking(incoming()) && 
+                        isVerificationWindowStillOpen(incoming()) &&
                         (incoming().status == 'PENDING' || incoming().status == 'CONFIRMED') &&
                         incoming().id == bookingId && 
                         (exists(/databases/$(database)/documents/rooms/$(incoming().roomId)) || incoming().roomId in ['m1', 'm2', 'r1', 'r2', 'r3', 't1']));
@@ -150,9 +145,12 @@ service cloud.firestore {
 
     // User-based Admins Collection
     match /admins/{adminId} {
-      allow get, list: if true;
+      allow get: if true;
+      allow list: if isAdmin();
+      // App-local Super Admin sessions create Admin accounts through the createAdminAccount callable.
+      // Firestore rules cannot verify React/local app session state, so direct client writes stay limited to Firebase-auth Super Admins.
       allow create, update: if isSuperAdmin() && isValidId(adminId) && incoming().id == adminId;
-      // App-local Super Admin sessions are verified by the backend deleteAdminAccount function.
+      // App-local Super Admin sessions are verified by backend callable functions such as deleteAdminAccount.
       // Firestore rules cannot read React/local app session state, so client-side admin deletes stay blocked.
       allow delete: if false;
     }
@@ -165,6 +163,24 @@ service cloud.firestore {
                             isValidRoomMaintenanceRecord(incoming()) &&
                             incoming().id == recordId;
       allow delete: if isAdmin();
+    }
+
+    // Email send audit/history records are written only by Cloud Functions.
+    match /emailSentHistory/{historyId} {
+      allow get, list: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    // Missed check-in archive records are written only by Cloud Functions.
+    match /missedCheckInHistory/{historyId} {
+      allow get, list: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    // Announcements are managed through Cloud Functions so all writes receive
+    // server-side validation, content sanitization, and admin authorization.
+    match /announcements/{announcementId} {
+      allow get, list, create, update, delete: if false;
     }
   }
 }

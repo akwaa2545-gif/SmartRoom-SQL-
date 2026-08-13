@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-3 -3 116 76">
+  <!-- Orange Logo pieces with transparent background and enhanced rounded corners -->
+  <!-- Left/Top piece -->
+  <path d="M 26 11 h 48 l -10 10 H 36 l -10 10 h 28 l -10 10 H 31 l -10 10 H 11 l 10 -10 H 6 l 20 -20 H 16 l 10 -10 Z" 
+        fill="#e5673e" stroke="#e5673e" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+  <!-- Right piece -->
+  <path d="M 83 11 h 16 l -10 10 H 73 Z" 
+        fill="#e5673e" stroke="#e5673e" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+  <!-- Bottom piece -->
+  <path d="M 53 47 h 6 l -15 15 H 35 Z" 
+        fill="#e5673e" stroke="#e5673e" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+</svg>

@@ -1,4 +1,4 @@
-# Security Specification: YAGEO SmartRoom Firestore Security
+# Security Specification: TOKIN Smart Room Firestore Security
 
 ## 1. Data Invariants
 
@@ -104,7 +104,7 @@ Below is a mock test runner blueprint matching the specification layout for loca
 // firestore.rules.test.ts
 import { assertFails, assertSucceeds, initializeTestEnvironment } from '@firebase/rules-unit-testing';
 
-describe("YAGEO SmartRoom Fortress Rules", () => {
+describe("TOKIN Smart Room Fortress Rules", () => {
   let testEnv;
   beforeAll(async () => {
     testEnv = await initializeTestEnvironment({ projectId: "sutsmartbus-495306" });
