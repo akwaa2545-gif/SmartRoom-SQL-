@@ -32,6 +32,28 @@ IF OBJECT_ID(N'dbo.MissedCheckInHistory', N'U') IS NULL
 IF OBJECT_ID(N'dbo.Announcements', N'U') IS NULL
   CREATE TABLE dbo.Announcements (Id nvarchar(128) NOT NULL PRIMARY KEY, Title nvarchar(200) NOT NULL, Message nvarchar(max) NOT NULL, Category nvarchar(40) NOT NULL, ImageUrl nvarchar(max) NOT NULL CONSTRAINT DF_Announcements_ImageUrl DEFAULT N'', ButtonText nvarchar(100) NOT NULL CONSTRAINT DF_Announcements_ButtonText DEFAULT N'', ButtonUrl nvarchar(2048) NOT NULL CONSTRAINT DF_Announcements_ButtonUrl DEFAULT N'', StartAt datetime2 NULL, EndAt datetime2 NULL, IsActive bit NOT NULL, ShowOnce bit NOT NULL, TargetPages nvarchar(max) NOT NULL, Audience nvarchar(30) NOT NULL, Priority int NOT NULL, CreatedAt datetime2 NOT NULL CONSTRAINT DF_Announcements_CreatedAt DEFAULT SYSUTCDATETIME(), UpdatedAt datetime2 NOT NULL CONSTRAINT DF_Announcements_UpdatedAt DEFAULT SYSUTCDATETIME());
 
+IF COL_LENGTH(N'dbo.Announcements', N'PublishedAt') IS NULL
+  ALTER TABLE dbo.Announcements ADD PublishedAt datetime2 NULL;
+
+IF COL_LENGTH(N'dbo.Announcements', N'DisabledAt') IS NULL
+  ALTER TABLE dbo.Announcements ADD DisabledAt datetime2 NULL;
+
+IF COL_LENGTH(N'dbo.EmailAudit', N'FirestoreDocumentId') IS NULL
+  ALTER TABLE dbo.EmailAudit ADD FirestoreDocumentId nvarchar(180) NULL;
+
+IF COL_LENGTH(N'dbo.EmailAudit', N'RecipientName') IS NULL
+  ALTER TABLE dbo.EmailAudit ADD RecipientName nvarchar(200) NOT NULL CONSTRAINT DF_EmailAudit_RecipientName DEFAULT N'';
+
+IF COL_LENGTH(N'dbo.EmailAudit', N'SentAt') IS NULL
+  ALTER TABLE dbo.EmailAudit ADD SentAt datetime2 NULL;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_EmailAudit_FirestoreDocumentId' AND object_id = OBJECT_ID(N'dbo.EmailAudit'))
+BEGIN
+  IF EXISTS (SELECT FirestoreDocumentId FROM dbo.EmailAudit WHERE FirestoreDocumentId IS NOT NULL GROUP BY FirestoreDocumentId HAVING COUNT(*) > 1)
+    THROW 51000, 'Duplicate FirestoreDocumentId values must be reconciled before creating UX_EmailAudit_FirestoreDocumentId.', 1;
+  CREATE UNIQUE INDEX UX_EmailAudit_FirestoreDocumentId ON dbo.EmailAudit (FirestoreDocumentId) WHERE FirestoreDocumentId IS NOT NULL;
+END
+
 IF OBJECT_ID(N'dbo.FirestoreMigrationAudit', N'U') IS NULL
   CREATE TABLE dbo.FirestoreMigrationAudit (RunId uniqueidentifier NOT NULL, CollectionName nvarchar(100) NOT NULL, DocumentId nvarchar(180) NOT NULL, Outcome nvarchar(20) NOT NULL, ErrorMessage nvarchar(1000) NULL, ProcessedAt datetime2 NOT NULL CONSTRAINT DF_FirestoreMigrationAudit_ProcessedAt DEFAULT SYSUTCDATETIME(), CONSTRAINT PK_FirestoreMigrationAudit PRIMARY KEY (RunId, CollectionName, DocumentId));
 
