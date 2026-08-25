@@ -218,62 +218,64 @@ const AnnouncementModal: React.FC<AnnouncementModalProps> = ({ page, audience, l
   const closeLabel = language === 'th' ? 'ปิดประกาศ' : 'Close announcement';
 
   return (
-    <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-slate-950/75 p-2 sm:p-4 backdrop-blur-sm">
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
-        className="relative max-h-[92vh] w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl outline-none sm:max-w-xl"
+        className="relative max-h-[calc(100dvh-1rem)] sm:max-h-[90vh] w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl outline-none sm:max-w-xl flex flex-col"
       >
         <button
           ref={closeButtonRef}
           type="button"
           onClick={handleClose}
           aria-label={closeLabel}
-          className="absolute right-3 top-3 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/95 text-slate-500 shadow-sm border border-slate-200 hover:bg-slate-50 hover:text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500"
+          className="absolute right-3 top-3 z-10 inline-flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-white/95 text-slate-500 shadow-sm border border-slate-200 hover:bg-slate-50 hover:text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500"
         >
           <X className="h-5 w-5" />
         </button>
 
-        {announcement.imageUrl && (
-          <img src={announcement.imageUrl} alt="" className="h-44 w-full object-cover bg-slate-100 sm:h-56" />
-        )}
+        <div className="overflow-y-auto flex-1 min-h-0">
+          {announcement.imageUrl && (
+            <img src={announcement.imageUrl} alt="" className="h-36 sm:h-52 w-full object-cover bg-slate-100" />
+          )}
 
-        <div className="p-5 sm:p-6">
-          <div className={`mb-4 inline-flex items-center rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-wide ${categoryMeta.badgeClass}`}>
-            <span className={`mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full ${categoryMeta.iconClass}`}>
-              <CategoryIcon className="h-3.5 w-3.5" />
-            </span>
-            {language === 'th' ? 'ประกาศ' : categoryMeta.label}
-          </div>
-          <h2 id={titleId} className="text-2xl font-black leading-tight text-slate-900 break-words sm:text-3xl">
-            {announcement.title}
-          </h2>
-          <p id={descriptionId} className="mt-3 whitespace-pre-line text-sm font-semibold leading-6 text-slate-600 break-words sm:text-base">
-            {announcement.message}
-          </p>
+          <div className="p-4 sm:p-6">
+            <div className={`mb-3 sm:mb-4 inline-flex items-center rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-wide ${categoryMeta.badgeClass}`}>
+              <span className={`mr-2 inline-flex h-4 sm:h-5 w-4 sm:w-5 items-center justify-center rounded-full ${categoryMeta.iconClass}`}>
+                <CategoryIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+              </span>
+              {language === 'th' ? 'ประกาศ' : categoryMeta.label}
+            </div>
+            <h2 id={titleId} className="text-xl font-black leading-tight text-slate-900 break-words sm:text-3xl">
+              {announcement.title}
+            </h2>
+            <p id={descriptionId} className="mt-2 sm:mt-3 whitespace-pre-line text-xs font-semibold leading-5 text-slate-600 break-words sm:text-base sm:leading-6">
+              {announcement.message}
+            </p>
 
-          <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-            <button
-              type="button"
-              onClick={handleClose}
-              className="inline-flex items-center justify-center rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-500"
-            >
-              {language === 'th' ? 'ปิด' : 'Close'}
-            </button>
-            {announcement.buttonText && safeButtonUrl && (
-              <a
-                href={safeButtonUrl}
-                target={safeButtonUrl.startsWith('http') ? '_blank' : undefined}
-                rel={safeButtonUrl.startsWith('http') ? 'noreferrer' : undefined}
-                onClick={() => storeDismissal(announcement)}
-                className={`inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-sm font-bold text-white focus:outline-none focus:ring-2 focus:ring-offset-2 ${categoryMeta.ctaClass}`}
+            <div className="mt-5 sm:mt-6 flex flex-col-reverse gap-2.5 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={handleClose}
+                className="inline-flex items-center justify-center rounded-lg border border-slate-200 px-4 py-2.5 text-xs sm:text-sm font-bold text-slate-600 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-500"
               >
-                {announcement.buttonText}
-              </a>
-            )}
+                {language === 'th' ? 'ปิด' : 'Close'}
+              </button>
+              {announcement.buttonText && safeButtonUrl && (
+                <a
+                  href={safeButtonUrl}
+                  target={safeButtonUrl.startsWith('http') ? '_blank' : undefined}
+                  rel={safeButtonUrl.startsWith('http') ? 'noreferrer' : undefined}
+                  onClick={() => storeDismissal(announcement)}
+                  className={`inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-xs sm:text-sm font-bold text-white focus:outline-none focus:ring-2 focus:ring-offset-2 ${categoryMeta.ctaClass}`}
+                >
+                  {announcement.buttonText}
+                </a>
+              )}
+            </div>
           </div>
         </div>
       </div>

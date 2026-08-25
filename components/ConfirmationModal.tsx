@@ -22,28 +22,51 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   onConfirm,
   onCancel,
 }) => {
-  if (!isOpen) return null;
+  const [internalClosed, setInternalClosed] = React.useState(false);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setInternalClosed(false);
+    }
+  }, [isOpen]);
+
+  if (!isOpen || internalClosed) return null;
+
+  const handleCancel = () => {
+    setInternalClosed(true);
+    onCancel();
+  };
+
+  const handleConfirm = () => {
+    setInternalClosed(true);
+    onCancel();
+    try {
+      onConfirm();
+    } catch (err) {
+      console.error('onConfirm error', err);
+    }
+  };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4">
       {/* Backdrop overlay */}
       <div 
         className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity animate-in fade-in duration-200"
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          onCancel();
+          handleCancel();
         }}
       />
 
       {/* Modal box */}
-      <div className="relative bg-white rounded-2xl max-w-md w-full mx-4 overflow-hidden border border-slate-200 shadow-2xl z-10 p-6 animate-in fade-in zoom-in-95 duration-200 text-slate-800">
+      <div className="relative bg-white rounded-2xl max-w-md w-full overflow-hidden border border-slate-200 shadow-2xl z-10 p-4 sm:p-6 max-h-[calc(100dvh-1.5rem)] overflow-y-auto flex flex-col animate-in fade-in zoom-in-95 duration-200 text-slate-800">
         <button 
           type="button"
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            onCancel();
+            handleCancel();
           }}
           className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors"
         >
@@ -66,7 +89,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              onCancel();
+              handleCancel();
             }}
             className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-sm font-semibold hover:bg-slate-50 transition-all cursor-pointer"
           >
@@ -77,7 +100,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              onConfirm();
+              handleConfirm();
             }}
             className={`px-5 py-2 text-white rounded-xl text-sm font-bold shadow-md hover:shadow transition-all cursor-pointer ${
               isDanger 

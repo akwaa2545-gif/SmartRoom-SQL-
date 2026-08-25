@@ -66,75 +66,75 @@ export const AdminGuideModal: React.FC<AdminGuideModalProps> = ({
   const c = copyAdminGuide[language];
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-      <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col h-[82vh] animate-in zoom-in-95 duration-300">
-        <div className="bg-slate-50 px-6 py-4 border-b border-slate-150 flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center space-x-2.5">
-            <BookOpen className="w-5 h-5 text-brand-600" />
-            <h2 className="font-bold text-slate-850 text-base sm:text-lg">{c.title}</h2>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+      <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[85vh] h-full sm:h-auto animate-in zoom-in-95 duration-300">
+        <div className="bg-slate-50 px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-150 flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center space-x-2.5 min-w-0 pr-2">
+            <BookOpen className="w-5 h-5 text-brand-600 flex-shrink-0" />
+            <h2 className="font-bold text-slate-850 text-sm sm:text-lg truncate">{c.title}</h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 hover:bg-slate-200/70 text-slate-400 hover:text-slate-600 rounded-lg transition-colors"
+            className="p-1.5 hover:bg-slate-200/70 text-slate-400 hover:text-slate-600 rounded-lg transition-colors flex-shrink-0"
             aria-label={t.close}
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-6 overflow-y-auto flex-grow text-slate-800 scrollbar-thin text-sm leading-relaxed space-y-6">
+        <div className="p-4 sm:p-6 overflow-y-auto flex-grow text-slate-800 scrollbar-thin text-xs sm:text-sm leading-relaxed space-y-5 sm:space-y-6">
           <div>
-            <h3 className="font-bold text-brand-700 text-sm border-b border-brand-100 pb-1.5 flex items-center">
-              <Building2 className="w-4 h-4 mr-2" />
+            <h3 className="font-bold text-brand-700 text-xs sm:text-sm border-b border-brand-100 pb-1.5 flex items-center">
+              <Building2 className="w-4 h-4 mr-2 flex-shrink-0" />
               {c.tabs.rooms}
             </h3>
             <div className="mt-3 space-y-3">
               {c.rooms.map(([title, desc]) => (
                 <div key={title} className="bg-slate-50 p-3 rounded-lg border border-slate-200/60">
-                  <h4 className="font-bold text-xs text-slate-900">{title}</h4>
-                  <p className="text-xs text-slate-600 mt-1">{desc}</p>
+                  <h4 className="font-bold text-xs text-slate-900 leading-snug">{title}</h4>
+                  <p className="text-xs text-slate-600 mt-1 leading-relaxed">{desc}</p>
                 </div>
               ))}
             </div>
           </div>
 
           <div>
-            <h3 className="font-bold text-brand-700 text-sm border-b border-brand-100 pb-1.5 flex items-center">
-              <Calendar className="w-4 h-4 mr-2" />
+            <h3 className="font-bold text-brand-700 text-xs sm:text-sm border-b border-brand-100 pb-1.5 flex items-center">
+              <Calendar className="w-4 h-4 mr-2 flex-shrink-0" />
               {c.tabs.bookings}
             </h3>
             <div className="mt-3 space-y-3">
               {c.bookings.map(([title, desc]) => (
                 <div key={title} className="bg-slate-50 p-3 rounded-lg border border-slate-200/60">
-                  <h4 className="font-bold text-xs text-slate-900">{title}</h4>
-                  <p className="text-xs text-slate-600 mt-1">{desc}</p>
+                  <h4 className="font-bold text-xs text-slate-900 leading-snug">{title}</h4>
+                  <p className="text-xs text-slate-600 mt-1 leading-relaxed">{desc}</p>
                 </div>
               ))}
             </div>
           </div>
 
           <div>
-            <h3 className="font-bold text-brand-700 text-sm border-b border-brand-100 pb-1.5 flex items-center">
-              <UserCog className="w-4 h-4 mr-2" />
+            <h3 className="font-bold text-brand-700 text-xs sm:text-sm border-b border-brand-100 pb-1.5 flex items-center">
+              <UserCog className="w-4 h-4 mr-2 flex-shrink-0" />
               {c.tabs.users}
             </h3>
             <div className="mt-3 space-y-3">
               {c.users.map(([title, desc]) => (
                 <div key={title} className="bg-slate-50 p-3 rounded-lg border border-slate-200/60">
-                  <h4 className="font-bold text-xs text-slate-900">{title}</h4>
-                  <p className="text-xs text-slate-600 mt-1">{desc}</p>
+                  <h4 className="font-bold text-xs text-slate-900 leading-snug">{title}</h4>
+                  <p className="text-xs text-slate-600 mt-1 leading-relaxed">{desc}</p>
                 </div>
               ))}
             </div>
           </div>
         </div>
 
-        <div className="bg-slate-50 px-6 py-4 border-t border-slate-150 flex justify-end flex-shrink-0">
+        <div className="bg-slate-50 px-4 sm:px-6 py-3 sm:py-4 border-t border-slate-150 flex justify-end flex-shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95"
+            className="px-5 py-2 sm:py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95"
           >
             {t.close}
           </button>

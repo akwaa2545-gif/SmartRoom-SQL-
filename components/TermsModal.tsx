@@ -21,29 +21,29 @@ export const TermsModal: React.FC<TermsModalProps> = ({
   const t = TRANSLATIONS[language];
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-      <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-300">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+      <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[88vh] animate-in zoom-in-95 duration-300">
 
         {/* Header */}
-        <div className="bg-gradient-to-r from-brand-600 to-brand-800 px-6 py-5 text-white flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center space-x-3">
+        <div className="bg-gradient-to-r from-brand-600 to-brand-800 px-4 sm:px-6 py-4 sm:py-5 text-white flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center space-x-3 min-w-0 pr-2">
             <ShieldAlert className="w-6 h-6 text-brand-300 animate-pulse flex-shrink-0" />
-            <div>
-              <h2 className="font-bold text-lg leading-snug">{t.termsTitle}</h2>
-              <p className="text-xs text-slate-100/80 font-medium">TOKIN SMART ROOM SERVICE RULES</p>
+            <div className="min-w-0">
+              <h2 className="font-bold text-base sm:text-lg leading-snug truncate">{t.termsTitle}</h2>
+              <p className="text-[10px] sm:text-xs text-slate-100/80 font-medium">TOKIN SMART ROOM SERVICE RULES</p>
             </div>
           </div>
 
-          <div className="flex bg-brand-900/40 p-1 rounded-lg border border-brand-500/30">
+          <div className="flex bg-brand-900/40 p-1 rounded-lg border border-brand-500/30 flex-shrink-0">
             <button
               onClick={() => setLanguage('en')}
-              className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${language === 'en' ? 'bg-white text-brand-700 shadow-sm' : 'text-brand-100 hover:text-white'}`}
+              className={`px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs font-bold rounded-md transition-all ${language === 'en' ? 'bg-white text-brand-700 shadow-sm' : 'text-brand-100 hover:text-white'}`}
             >
               EN
             </button>
             <button
               onClick={() => setLanguage('th')}
-              className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${language === 'th' ? 'bg-white text-brand-700 shadow-sm' : 'text-brand-100 hover:text-white'}`}
+              className={`px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs font-bold rounded-md transition-all ${language === 'th' ? 'bg-white text-brand-700 shadow-sm' : 'text-brand-100 hover:text-white'}`}
             >
               TH
             </button>
@@ -51,7 +51,7 @@ export const TermsModal: React.FC<TermsModalProps> = ({
         </div>
 
         {/* Scrollable Rules Content */}
-        <div className="p-6 overflow-y-auto space-y-5 flex-grow text-slate-800 scrollbar-thin">
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-4 sm:space-y-5 flex-grow text-slate-800 scrollbar-thin">
 
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start space-x-3">
             <Flame className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5 animate-bounce" />

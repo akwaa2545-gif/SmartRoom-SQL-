@@ -7,7 +7,7 @@ import ConfirmationModal from './ConfirmationModal';
 import { collection, onSnapshot, setDoc, doc } from 'firebase/firestore';
 import { signInAnonymously } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
-import { getPortableAdminEmailHistory, isPortableMailApiEnabled, loginPortableAdmin, runPortableAdminTool } from '../utils/portableMailApi';
+import { getPortableAdminEmailHistory, getPortableAdminPassword, isPortableMailApiEnabled, loginPortableAdmin, logoutPortableAdmin, runPortableAdminTool } from '../utils/portableMailApi';
 import { db, auth, functions, handleFirestoreError, OperationType } from '../firebase';
 import { AdminGuideModal } from './admin/AdminGuideModal';
 import { EditBookingModal } from './admin/EditBookingModal';
@@ -485,6 +485,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [emailSearchTerm, setEmailSearchTerm] = useState('');
   const [emailDateFilter, setEmailDateFilter] = useState('');
+  const [emailVerificationFilter, setEmailVerificationFilter] = useState<'all' | 'unverified' | 'waitForVerify' | 'verified' | 'notVerified' | 'failed'>('all');
   const [historyFilterYear, setHistoryFilterYear] = useState<string>('all');
   const [historyFilterMonth, setHistoryFilterMonth] = useState<string>('all');
   const [historyFilterDay, setHistoryFilterDay] = useState<string>('');
@@ -588,7 +589,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       console.warn("Cloud function login failed, falling back to local list matching:", err);
       const user = adminUsers.find(u => u.username === loginUsername && (u.password === hashed || u.password === loginPassword));
       if (user) {
-        completeLogin(user);
+        completeLogin({ ...user, password: hashed });
       } else {
         setLoginErrorKey('invalidUserPass');
       }
@@ -874,15 +875,18 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     try {
       if (isPortableMailApiEnabled()) {
         await runPortableAdminTool('save_room', { room: roomToSave, maintenanceRecord });
+        if (editingRoom) {
+          onUpdateRoom({ ...editingRoom, ...roomToSave } as Room);
+        } else {
+          onAddRoom(roomToSave);
+        }
+        showNotification(editingRoom ? t.roomUpdatedSuccess : t.roomCreatedSuccess, 'success');
       } else if (editingRoom) {
         await onUpdateRoom({ ...editingRoom, ...roomToSave } as Room);
         showNotification(t.roomUpdatedSuccess, 'success');
       } else {
         await onAddRoom(roomToSave);
         showNotification(t.roomCreatedSuccess, 'success');
-      }
-      if (isPortableMailApiEnabled()) {
-        showNotification(editingRoom ? t.roomUpdatedSuccess : t.roomCreatedSuccess, 'success');
       }
       setIsRoomModalOpen(false);
     } catch (err: any) {
@@ -1095,6 +1099,59 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     return list.sort((a, b) => b.sentAt.getTime() - a.sentAt.getTime());
   }, [emailHistory, bookings, rooms]);
 
+  const getEmailHistoryVerificationStatus = (record: EmailSentHistoryRecord, booking?: Booking): EmailHistoryVerificationStatus => {
+    if (record.status === 'queued') return 'pendingSend';
+    if (!booking) return 'na';
+
+    const isVerified = booking.status === BookingStatus.VERIFIED || !!booking.verifiedAt || !!booking.actualStartTime;
+    if (isVerified) return 'verified';
+
+    if (record.status !== 'successful') return 'na';
+
+    const cutoffTime = booking.verificationWindowClosedAt
+      ? new Date(booking.verificationWindowClosedAt).getTime()
+      : new Date(booking.startTime).getTime() + 15 * 60 * 1000;
+
+    return liveTime.getTime() <= cutoffTime && booking.status === BookingStatus.CONFIRMED
+      ? 'waitForVerify'
+      : 'notVerified';
+  };
+
+  const emailHistoryStats = useMemo(() => {
+    let unverified = 0;
+    let waitForVerify = 0;
+    let verified = 0;
+    let notVerified = 0;
+    let failed = 0;
+
+    combinedEmailHistory.forEach(record => {
+      if (record.status === 'failed') {
+        failed += 1;
+        return;
+      }
+      const booking = bookings.find(b => b.id === record.relatedBookingId);
+      const status = getEmailHistoryVerificationStatus(record, booking);
+      if (status === 'verified') {
+        verified += 1;
+      } else if (status === 'waitForVerify') {
+        waitForVerify += 1;
+        unverified += 1;
+      } else if (status === 'notVerified') {
+        notVerified += 1;
+        unverified += 1;
+      }
+    });
+
+    return {
+      total: combinedEmailHistory.length,
+      unverified,
+      waitForVerify,
+      verified,
+      notVerified,
+      failed
+    };
+  }, [combinedEmailHistory, bookings, liveTime]);
+
   const filteredEmailHistory = useMemo(() => {
     const term = emailSearchTerm.trim().toLowerCase();
     
@@ -1137,8 +1194,20 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       });
     }
 
+    if (emailVerificationFilter !== 'all') {
+      result = result.filter(record => {
+        if (emailVerificationFilter === 'failed') return record.status === 'failed';
+        const booking = bookings.find(b => b.id === record.relatedBookingId);
+        const status = getEmailHistoryVerificationStatus(record, booking);
+        if (emailVerificationFilter === 'unverified') {
+          return status === 'waitForVerify' || status === 'notVerified';
+        }
+        return status === emailVerificationFilter;
+      });
+    }
+
     return result;
-  }, [combinedEmailHistory, emailSearchTerm, emailDateFilter]);
+  }, [combinedEmailHistory, emailSearchTerm, emailDateFilter, emailVerificationFilter, bookings, liveTime]);
 
   const bookingMatchesHistoryDateFilter = (booking: Booking) => {
     const bookingDate = booking.startTime;
@@ -1334,24 +1403,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     return `${formatDate(value, language, { weekday: undefined, month: 'short', day: 'numeric', year: 'numeric' })} ${time}`;
   };
 
-  const getEmailHistoryVerificationStatus = (record: EmailSentHistoryRecord, booking?: Booking): EmailHistoryVerificationStatus => {
-    if (record.status === 'queued') return 'pendingSend';
-    if (!booking) return 'na';
-
-    const isVerified = booking.status === BookingStatus.VERIFIED || !!booking.verifiedAt || !!booking.actualStartTime;
-    if (isVerified) return 'verified';
-
-    if (record.status !== 'successful') return 'na';
-
-    const cutoffTime = booking.verificationWindowClosedAt
-      ? new Date(booking.verificationWindowClosedAt).getTime()
-      : new Date(booking.startTime).getTime() + 15 * 60 * 1000;
-
-    return liveTime.getTime() <= cutoffTime && booking.status === BookingStatus.CONFIRMED
-      ? 'waitForVerify'
-      : 'notVerified';
-  };
-
   const normalizeEmailHistoryRecord = (raw: any): EmailSentHistoryRecord => ({
     id: String(raw?.id || Math.random().toString(36).slice(2)),
     recipientEmail: String(raw?.recipientEmail || ''),
@@ -1427,6 +1478,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
     setIsAnnouncementLoading(true);
     try {
+      if (!isPortableMailApiEnabled() && !auth.currentUser) {
+        await signInAnonymously(auth);
+      }
       const listAnnouncements = httpsCallable(functions, 'listAnnouncements');
       const response = await listAnnouncements({ admin: adminPayload });
       const data = response.data as { announcements?: unknown[] };
@@ -1464,6 +1518,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       onConfirm: async () => {
         try {
           await runPortableAdminTool('delete_room', { roomId: room.id });
+          onDeleteRoom(room.id);
           showNotification(`Room ${room.name} deleted successfully`, 'success');
         } catch (error) {
           console.error('Portable room delete failed', error);
@@ -1476,11 +1531,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const handleDeleteBooking = (booking: Booking) => {
-    if (!isPortableMailApiEnabled()) {
-      onDeleteBooking(booking.id);
-      return;
-    }
-
     setConfirmModal({
       isOpen: true,
       title: 'Confirm Delete Booking',
@@ -1489,8 +1539,36 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       confirmText: 'Delete',
       cancelText: 'Cancel',
       onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
         try {
-          await runPortableAdminTool('delete_booking', { bookingId: booking.id });
+          if (isPortableMailApiEnabled()) {
+            try {
+              await runPortableAdminTool('delete_booking', { bookingId: booking.id });
+            } catch (portableErr) {
+              const adminPayload = getCurrentAdminAuthPayload();
+              if (adminPayload) {
+                const deleteBookingAsAdmin = httpsCallable(functions, 'deleteBookingAsAdmin');
+                await deleteBookingAsAdmin({
+                  bookingId: booking.id,
+                  admin: adminPayload
+                });
+              } else {
+                throw portableErr;
+              }
+            }
+          } else {
+            const adminPayload = getCurrentAdminAuthPayload();
+            if (adminPayload) {
+              const deleteBookingAsAdmin = httpsCallable(functions, 'deleteBookingAsAdmin');
+              await deleteBookingAsAdmin({
+                bookingId: booking.id,
+                admin: adminPayload
+              });
+            } else {
+              await deleteDoc(doc(db, 'bookings', booking.id));
+            }
+          }
+          onDeleteBooking(booking.id);
           showNotification('Booking successfully deleted', 'success');
         } catch (error) {
           console.error('Portable booking delete failed', error);
@@ -1697,7 +1775,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       id: currentUser.id,
       firestoreDocId: currentUser.id,
       username: currentUser.username,
-      password: currentUser.password || '',
+      password: isPortableMailApiEnabled() ? getPortableAdminPassword() : (currentUser.password || ''),
       role: currentUser.role,
     };
   };
@@ -2015,6 +2093,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
           </button>
           <button
             onClick={() => {
+              logoutPortableAdmin();
               updateCurrentUser(null);
               setLoginUsername('');
               setLoginPassword('');
@@ -2693,6 +2772,99 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
           </div>
 
+          {/* Summary Stats Cards */}
+          <div className="p-4 bg-slate-50 border-b border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <button
+              type="button"
+              onClick={() => setEmailVerificationFilter('all')}
+              className={`p-3 rounded-xl border text-left transition-all ${emailVerificationFilter === 'all' ? 'bg-white border-brand-500 shadow-sm ring-1 ring-brand-500' : 'bg-white/60 border-slate-200 hover:bg-white'}`}
+            >
+              <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">{language === 'th' ? 'อีเมลทั้งหมด' : 'Total Emails'}</div>
+              <div className="text-xl font-black text-slate-900 mt-1">{emailHistoryStats.total}</div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setEmailVerificationFilter('unverified')}
+              className={`p-3 rounded-xl border text-left transition-all ${emailVerificationFilter === 'unverified' ? 'bg-amber-50 border-amber-500 shadow-sm ring-1 ring-amber-500' : 'bg-white/60 border-amber-200 hover:bg-amber-50/50'}`}
+            >
+              <div className="text-xs font-bold text-amber-700 uppercase tracking-wider flex items-center justify-between">
+                <span>{language === 'th' ? 'ส่งแล้ว - ยังไม่ยืนยัน' : 'Sent - Unverified'}</span>
+                {emailHistoryStats.unverified > 0 && (
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+                )}
+              </div>
+              <div className="text-xl font-black text-amber-900 mt-1">{emailHistoryStats.unverified}</div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setEmailVerificationFilter('verified')}
+              className={`p-3 rounded-xl border text-left transition-all ${emailVerificationFilter === 'verified' ? 'bg-emerald-50 border-emerald-500 shadow-sm ring-1 ring-emerald-500' : 'bg-white/60 border-emerald-200 hover:bg-emerald-50/50'}`}
+            >
+              <div className="text-xs font-bold text-emerald-700 uppercase tracking-wider">{language === 'th' ? 'ยืนยันเรียบร้อย' : 'Verified'}</div>
+              <div className="text-xl font-black text-emerald-900 mt-1">{emailHistoryStats.verified}</div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setEmailVerificationFilter('failed')}
+              className={`p-3 rounded-xl border text-left transition-all ${emailVerificationFilter === 'failed' ? 'bg-rose-50 border-rose-500 shadow-sm ring-1 ring-rose-500' : 'bg-white/60 border-rose-200 hover:bg-rose-50/50'}`}
+            >
+              <div className="text-xs font-bold text-rose-700 uppercase tracking-wider">{language === 'th' ? 'ส่งไม่สำเร็จ' : 'Failed Send'}</div>
+              <div className="text-xl font-black text-rose-900 mt-1">{emailHistoryStats.failed}</div>
+            </button>
+          </div>
+
+          {/* Quick Filter Bar */}
+          <div className="px-4 py-3 bg-white border-b border-slate-200 flex flex-wrap items-center gap-2 text-xs font-bold">
+            <span className="text-slate-400 mr-1">{language === 'th' ? 'ตัวกรองสถานะ:' : 'Filter:'}</span>
+            <button
+              type="button"
+              onClick={() => setEmailVerificationFilter('all')}
+              className={`px-3 py-1.5 rounded-lg border transition-all ${emailVerificationFilter === 'all' ? 'bg-slate-900 text-white border-slate-900 shadow-sm' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}
+            >
+              {language === 'th' ? 'ทั้งหมด' : 'All'} ({emailHistoryStats.total})
+            </button>
+            <button
+              type="button"
+              onClick={() => setEmailVerificationFilter('unverified')}
+              className={`px-3 py-1.5 rounded-lg border transition-all flex items-center space-x-1.5 ${emailVerificationFilter === 'unverified' ? 'bg-amber-600 text-white border-amber-600 shadow-sm font-black' : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'}`}
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>{language === 'th' ? 'ส่งแล้ว (ยังไม่ยืนยัน)' : 'Sent (Unverified)'}</span>
+              <span className="ml-1 bg-amber-200/60 px-1.5 py-0.2 rounded-full text-[10px]">{emailHistoryStats.unverified}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setEmailVerificationFilter('waitForVerify')}
+              className={`px-3 py-1.5 rounded-lg border transition-all ${emailVerificationFilter === 'waitForVerify' ? 'bg-amber-500 text-white border-amber-500 shadow-sm' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}
+            >
+              {language === 'th' ? 'อยู่ระหว่างรอเช็คอิน (15 นาที)' : 'In Check-in Window'} ({emailHistoryStats.waitForVerify})
+            </button>
+            <button
+              type="button"
+              onClick={() => setEmailVerificationFilter('verified')}
+              className={`px-3 py-1.5 rounded-lg border transition-all ${emailVerificationFilter === 'verified' ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}
+            >
+              {language === 'th' ? 'ยืนยันแล้ว' : 'Verified'} ({emailHistoryStats.verified})
+            </button>
+            <button
+              type="button"
+              onClick={() => setEmailVerificationFilter('notVerified')}
+              className={`px-3 py-1.5 rounded-lg border transition-all ${emailVerificationFilter === 'notVerified' ? 'bg-rose-600 text-white border-rose-600 shadow-sm' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}
+            >
+              {language === 'th' ? 'ไม่ยืนยัน / หมดเวลา' : 'Expired / Not Verified'} ({emailHistoryStats.notVerified})
+            </button>
+            <button
+              type="button"
+              onClick={() => setEmailVerificationFilter('failed')}
+              className={`px-3 py-1.5 rounded-lg border transition-all ${emailVerificationFilter === 'failed' ? 'bg-rose-700 text-white border-rose-700 shadow-sm' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}
+            >
+              {language === 'th' ? 'ส่งไม่สำเร็จ' : 'Failed'} ({emailHistoryStats.failed})
+            </button>
+          </div>
+
           {emailHistoryError && (
             <div className="m-4 p-3 bg-rose-50 border border-rose-100 rounded-lg text-sm font-semibold text-rose-700 flex items-center">
               <AlertCircle className="w-4 h-4 mr-2 flex-shrink-0" />
@@ -2792,29 +2964,47 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                           </span>
                         </td>
                         <td className="px-6 py-4">
-                          {verifiedStatus === 'verified' ? (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
-                              <Check className="w-3.5 h-3.5 mr-1" />
-                              {getEmailHistoryVerificationStatusLabel(verifiedStatus)}
-                            </span>
-                          ) : verifiedStatus === 'pendingSend' ? (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200">
-                              <Clock className="w-3.5 h-3.5 mr-1" />
-                              {getEmailHistoryVerificationStatusLabel(verifiedStatus)}
-                            </span>
-                          ) : verifiedStatus === 'waitForVerify' ? (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200">
-                              <Clock className="w-3.5 h-3.5 mr-1" />
-                              {getEmailHistoryVerificationStatusLabel(verifiedStatus)}
-                            </span>
-                          ) : verifiedStatus === 'notVerified' ? (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-700 border border-rose-200">
-                              <XCircle className="w-3.5 h-3.5 mr-1" />
-                              {getEmailHistoryVerificationStatusLabel(verifiedStatus)}
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 font-semibold">{getEmailHistoryVerificationStatusLabel(verifiedStatus)}</span>
-                          )}
+                          <div className="flex flex-col gap-1.5 items-start">
+                            {verifiedStatus === 'verified' ? (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
+                                <Check className="w-3.5 h-3.5 mr-1" />
+                                {getEmailHistoryVerificationStatusLabel(verifiedStatus)}
+                              </span>
+                            ) : verifiedStatus === 'pendingSend' ? (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200">
+                                <Clock className="w-3.5 h-3.5 mr-1" />
+                                {getEmailHistoryVerificationStatusLabel(verifiedStatus)}
+                              </span>
+                            ) : verifiedStatus === 'waitForVerify' ? (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200">
+                                <Clock className="w-3.5 h-3.5 mr-1" />
+                                {getEmailHistoryVerificationStatusLabel(verifiedStatus)}
+                              </span>
+                            ) : verifiedStatus === 'notVerified' ? (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-700 border border-rose-200">
+                                <XCircle className="w-3.5 h-3.5 mr-1" />
+                                {getEmailHistoryVerificationStatusLabel(verifiedStatus)}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 font-semibold">{getEmailHistoryVerificationStatusLabel(verifiedStatus)}</span>
+                            )}
+
+                            {(verifiedStatus === 'waitForVerify' || verifiedStatus === 'notVerified') && record.relatedBookingId && (
+                              <div className="flex items-center space-x-1.5 mt-1">
+                                {onVerifyBooking && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onVerifyBooking(record.relatedBookingId)}
+                                    className="px-2 py-0.5 text-[10px] font-bold bg-emerald-600 text-white rounded hover:bg-emerald-700 transition-all flex items-center shadow-xs"
+                                    title={language === 'th' ? 'ยืนยันการใช้งานห้องแทนผู้ใช้' : 'Verify booking as Admin'}
+                                  >
+                                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                                    {language === 'th' ? 'ยืนยันแทนผู้ใช้' : 'Verify'}
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -3470,19 +3660,19 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
       {/* Add/Edit Room Modal */}
       {isRoomModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[calc(100vh-2rem)] animate-in fade-in zoom-in duration-200 overflow-hidden">
-            <form onSubmit={handleRoomSubmit} className="flex max-h-[calc(100vh-2rem)] flex-col">
-              <div className="flex flex-shrink-0 justify-between items-center p-6 border-b border-slate-100">
-                <h3 className="text-lg font-bold text-slate-900">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[calc(100dvh-1rem)] sm:max-h-[90vh] animate-in fade-in zoom-in duration-200 overflow-hidden flex flex-col">
+            <form onSubmit={handleRoomSubmit} className="flex max-h-[calc(100dvh-1rem)] flex-col flex-1 min-h-0">
+              <div className="flex flex-shrink-0 justify-between items-center p-4 sm:p-6 border-b border-slate-100">
+                <h3 className="text-base sm:text-lg font-bold text-slate-900">
                   {editingRoom ? t.editRoom : t.addNewRoom}
                 </h3>
-                <button type="button" onClick={() => setIsRoomModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
+                <button type="button" onClick={() => setIsRoomModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors p-1">
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto overscroll-contain p-6 space-y-4">
+              <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-4">
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1">{t.roomName}</label>
                   <input
@@ -3723,22 +3913,22 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
       {/* Add User Modal */}
       {isUserModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md animate-in fade-in zoom-in duration-200">
-            <div className="flex justify-between items-center p-6 border-b border-slate-100">
-              <h3 className="text-lg font-bold text-slate-900">{t.addNewAdmin}</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[calc(100dvh-1rem)] sm:max-h-[90vh] animate-in fade-in zoom-in duration-200 overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center p-4 sm:p-6 border-b border-slate-100 flex-shrink-0">
+              <h3 className="text-base sm:text-lg font-bold text-slate-900">{t.addNewAdmin}</h3>
               <button
                 onClick={() => {
                   setNewUserFormErrors({ password: '', employeeId: '', phone: '' });
                   setIsUserModalOpen(false);
                 }}
-                className="text-slate-400 hover:text-slate-600 transition-colors"
+                className="text-slate-400 hover:text-slate-600 transition-colors p-1"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateUser} className="p-6 space-y-4">
+            <form onSubmit={handleCreateUser} className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1 min-h-0">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1">
@@ -3910,12 +4100,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       )}
 
       {announcementPreview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl border border-white/20">
-            {announcementPreview.imageUrl && (
-              <img src={announcementPreview.imageUrl} alt="" className="h-56 w-full object-cover bg-slate-100" />
-            )}
-            <div className="p-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-2 sm:p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg max-h-[calc(100dvh-1rem)] sm:max-h-[90vh] overflow-hidden rounded-2xl bg-white shadow-2xl border border-white/20 flex flex-col">
+            <div className="overflow-y-auto flex-1 min-h-0">
+              {announcementPreview.imageUrl && (
+                <img src={announcementPreview.imageUrl} alt="" className="h-40 sm:h-56 w-full object-cover bg-slate-100" />
+              )}
+              <div className="p-4 sm:p-6">
               {(() => {
                 const meta = getAnnouncementCategoryMeta(announcementPreview.category);
                 const Icon = meta.Icon;
@@ -3952,7 +4143,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
           </div>
         </div>
-      )}
+      </div>
+    )}
 
       {/* Confirmation Modal */}
       <ConfirmationModal

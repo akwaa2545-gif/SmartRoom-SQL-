@@ -85,21 +85,23 @@ const Dashboard: React.FC<DashboardProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  // Date selection state
-  const [dateStr, setDateStr] = useState<string>(() => {
-    const d = new Date();
-    const offset = d.getTimezoneOffset();
-    const localDate = new Date(d.getTime() - (offset * 60 * 105));
-    return localDate.toISOString().split('T')[0];
-  });
+  // Helper to format Date into YYYY-MM-DD in local timezone
+  const getTodayLocalDateString = (d: Date = new Date()): string => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Date selection state - defaults to current day on web refresh
+  const [dateStr, setDateStr] = useState<string>(() => getTodayLocalDateString());
 
   const selectedDateObj = useMemo(() => {
     return new Date(`${dateStr}T00:00:00`);
   }, [dateStr]);
 
   const isToday = useMemo(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    return dateStr === todayStr;
+    return dateStr === getTodayLocalDateString();
   }, [dateStr]);
 
   // Custom Calendar States & Logic
@@ -425,10 +427,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const navigateDate = (days: number) => {
     const d = new Date(selectedDateObj);
     d.setDate(d.getDate() + days);
-
-    const offset = d.getTimezoneOffset();
-    const localDate = new Date(d.getTime() - (offset * 60 * 1000));
-    setDateStr(localDate.toISOString().split('T')[0]);
+    setDateStr(getTodayLocalDateString(d));
   };
 
   const getCellStatus = (roomId: string, hour: number) => {
@@ -1440,13 +1439,6 @@ const Dashboard: React.FC<DashboardProps> = ({
                   </tbody>
                 </table>
               </div>
-              <div className="p-4 border-t border-cyan-100 bg-gradient-to-r from-cyan-50 via-white to-blue-50 flex flex-wrap items-center justify-end gap-x-6 gap-y-2 text-xs text-slate-600 font-semibold rounded-b-xl">
-                <div className="flex items-center"><div className="w-3 h-3 bg-emerald-50 border border-emerald-300 rounded mr-1.5 font-bold"></div> {t.free}</div>
-                <div className="flex items-center"><div className="w-3 h-3 bg-gradient-to-r from-orange-300 to-yellow-200 border border-orange-400 rounded mr-1.5 font-bold text-orange-900"></div> {language === 'th' ? 'ยืนยันจอง' : 'Confirmed'}</div>
-                <div className="flex items-center"><div className="w-3 h-3 bg-amber-100 border border-amber-300 rounded mr-1.5 font-bold text-amber-900"></div> {t.pending}</div>
-                <div className="flex items-center"><div className="w-3 h-3 bg-slate-100 border border-slate-200 rounded mr-1.5 font-bold"></div> {language === 'th' ? 'หมดเวลาจอง' : 'Passed'}</div>
-                <div className="flex items-center"><div className="w-3 h-3 bg-slate-100 border border-slate-300 rounded mr-1.5"></div> {temporarilyDisabledLabel}</div>
-              </div>
             </div>
           )}
         </div>
@@ -1463,13 +1455,6 @@ const Dashboard: React.FC<DashboardProps> = ({
                 <Clock className="w-5 h-5 mr-2 text-cyan-500" />
                 {t.timelineGrid} ({formatDate(selectedDateObj, language, { weekday: 'short', month: 'short', day: 'numeric' })})
               </h3>
-              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-semibold">
-                <div className="flex items-center"><div className="w-3.5 h-3.5 bg-emerald-50 border border-emerald-300 rounded mr-1"></div> {t.free}</div>
-                <div className="flex items-center"><div className="w-3.5 h-3.5 bg-brand-500 border border-brand-600 rounded mr-1"></div> {language === 'th' ? 'เลือกเเล้ว' : 'Selected (To Book)'}</div>
-                <div className="flex items-center"><div className="w-3.5 h-3.5 bg-gradient-to-r from-orange-300 to-yellow-200 border border-orange-400 rounded mr-1"></div> {t.booked}</div>
-                <div className="flex items-center"><div className="w-3.5 h-3.5 bg-slate-100 border border-slate-205 rounded mr-1"></div> {language === 'th' ? 'หมดเวลาจอง' : 'Passed'}</div>
-                <div className="flex items-center"><div className="w-3.5 h-3.5 bg-slate-100 border border-slate-300 rounded mr-1"></div> {temporarilyDisabledLabel}</div>
-              </div>
             </div>
 
             <div className="space-y-1">
