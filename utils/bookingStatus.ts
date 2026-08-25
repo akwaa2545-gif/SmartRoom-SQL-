@@ -4,14 +4,21 @@ export type BookingDisplayState = 'noCheckIn' | 'pending' | 'waitForVerify' | 'v
 
 const CHECK_IN_WINDOW_AFTER_MS = 15 * 60 * 1000;
 
+const timestamp = (value: Date | string | number | undefined, fallback: number): number => {
+  if (!value) return fallback;
+  const date = value instanceof Date ? value : new Date(value);
+  const time = date.getTime();
+  return Number.isNaN(time) ? fallback : time;
+};
+
 export const getBookingDisplayState = (booking: Booking, now: Date = new Date()): BookingDisplayState => {
   if (booking.status === BookingStatus.REJECTED) return 'rejected';
   if (booking.status === BookingStatus.NO_SHOW || (booking.status as string) === 'MISSED_CHECK_IN') return 'noCheckIn';
   if (booking.status === BookingStatus.PENDING) return 'pending';
 
   const nowTime = now.getTime();
-  const startTime = booking.startTime.getTime();
-  const endTime = booking.endTime.getTime();
+  const startTime = timestamp(booking.startTime, nowTime);
+  const endTime = timestamp(booking.endTime, startTime);
 
   if (nowTime > endTime) return 'used';
 
@@ -23,7 +30,7 @@ export const getBookingDisplayState = (booking: Booking, now: Date = new Date())
   }
 
   if (booking.status === BookingStatus.CONFIRMED) {
-    const createdAtTime = booking.createdAt ? booking.createdAt.getTime() : startTime;
+    const createdAtTime = timestamp(booking.createdAt, startTime);
     const baseCutoff = startTime + CHECK_IN_WINDOW_AFTER_MS;
     const graceCutoff = createdAtTime + CHECK_IN_WINDOW_AFTER_MS;
     const verifyCutoffTime = Math.max(baseCutoff, graceCutoff);

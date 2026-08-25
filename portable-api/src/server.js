@@ -9,6 +9,11 @@ const sql = require("mssql");
 const { getConfig } = require("./config");
 const { createHealthResponse } = require("./health");
 const {
+  currentBangkokMonth,
+  leaderboardEntries,
+  rankedLeaderboardRows,
+} = require("./leaderboard");
+const {
   ApiError,
   assertYageoEmail,
   assertBookingId,
@@ -531,6 +536,82 @@ async function listSqlBookings(from, end) {
   return [...activeBookings, ...missedCheckIns].sort(
     (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime() || a.id.localeCompare(b.id),
   );
+}
+
+async function listSqlLeaderboard(now = new Date()) {
+  const { start, end } = currentBangkokMonth(now);
+  const connection = await pool.connect();
+  const scoreResult = await connection
+    .request()
+    .input("periodStart", sql.DateTime2, start)
+    .input("periodEnd", sql.DateTime2, end)
+    .input("now", sql.DateTime2, now)
+    .query(`WITH Eligible AS (
+      SELECT Id, LOWER(LTRIM(RTRIM(Email))) AS EmailKey,
+        NULLIF(LTRIM(RTRIM(EmailDisplayName)), N'') AS EmailDisplayName,
+        StartTime, EndTime
+      FROM dbo.Bookings
+      WHERE Status = N'VERIFIED'
+        AND ActualStartTime IS NOT NULL
+        AND StartTime >= @periodStart
+        AND EndTime < @periodEnd
+        AND EndTime <= @now
+    ), Scores AS (
+      SELECT EmailKey, SUM(DATEDIFF_BIG(minute, StartTime, EndTime)) AS BookedMinutes,
+        COUNT_BIG(*) AS BookingCount
+      FROM Eligible
+      GROUP BY EmailKey
+    ), LatestNames AS (
+      SELECT EmailKey, EmailDisplayName,
+        ROW_NUMBER() OVER (PARTITION BY EmailKey ORDER BY StartTime DESC, Id DESC) AS RowNumber
+      FROM Eligible
+      WHERE EmailDisplayName IS NOT NULL
+    )
+    SELECT scores.EmailKey, COALESCE(names.EmailDisplayName, N'Room user') AS EmailDisplayName,
+      scores.BookedMinutes, scores.BookingCount
+    FROM Scores AS scores
+    LEFT JOIN LatestNames AS names
+      ON names.EmailKey = scores.EmailKey AND names.RowNumber = 1;`);
+
+  const rankedRows = rankedLeaderboardRows(scoreResult.recordset);
+  const leaders = leaderboardEntries(scoreResult.recordset);
+  if (rankedRows.length === 0)
+    return {
+      periodStart: start.toISOString(),
+      periodEnd: end.toISOString(),
+      leaders,
+      bookingRanks: [],
+    };
+
+  const leaderRanks = new Map(rankedRows.map((row) => [row.emailKey, row.rank]));
+  const rankRequest = connection
+    .request()
+    .input("periodStart", sql.DateTime2, start)
+    .input("periodEnd", sql.DateTime2, end)
+    .input("now", sql.DateTime2, now);
+  const emailParameters = rankedRows.map((row, index) => {
+    const name = `leaderEmail${index}`;
+    rankRequest.input(name, sql.NVarChar(254), row.emailKey);
+    return `@${name}`;
+  });
+  const bookingsResult = await rankRequest.query(`SELECT Id, LOWER(LTRIM(RTRIM(Email))) AS EmailKey
+    FROM dbo.Bookings
+    WHERE Status = N'VERIFIED'
+      AND ActualStartTime IS NOT NULL
+      AND StartTime >= @periodStart
+      AND EndTime < @periodEnd
+      AND EndTime <= @now
+      AND LOWER(LTRIM(RTRIM(Email))) IN (${emailParameters.join(", ")});`);
+
+  return {
+    periodStart: start.toISOString(),
+    periodEnd: end.toISOString(),
+    leaders,
+    bookingRanks: bookingsResult.recordset.flatMap((record) => {
+      const rank = leaderRanks.get(record.EmailKey);
+      return rank ? [{ bookingId: record.Id, rank }] : [];
+    }),
+  };
 }
 
 async function listSqlRoomMaintenanceHistory() {
@@ -2122,6 +2203,13 @@ const requestHandler = async (request, response) => {
       return json(response, 200, {
         success: true,
         data: { bookings: await listSqlBookings(from, end) },
+      });
+    }
+    if (request.method === "GET" && url.pathname === "/api/leaderboard") {
+      await requireFirebaseUser(request);
+      return json(response, 200, {
+        success: true,
+        data: await listSqlLeaderboard(),
       });
     }
     if (

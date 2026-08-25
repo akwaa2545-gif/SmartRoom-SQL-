@@ -4,6 +4,7 @@ import { Room, Booking, RoomType, BookingStatus, AdminUser, AdminRole, RoomMaint
 import RoomCard from './components/RoomCard';
 import BookingModal from './components/BookingModal';
 import Dashboard from './components/Dashboard';
+import LeaderboardPage from './components/LeaderboardPage';
 import AnnouncementModal from './components/AnnouncementModal';
 import { DashboardSkeleton } from './components/SkeletonLoader';
 const AdminPanel = React.lazy(() => import('./components/AdminPanel'));
@@ -11,7 +12,7 @@ import ConfirmationModal from './components/ConfirmationModal';
 import VerifyBookingPage from './components/VerifyBookingPage';
 import { LocalNetworkAccessGuide } from './components/LocalNetworkAccessGuide';
 import { TRANSLATIONS, getEffectiveRoomStatus, isRoomClosureExpired, isRoomClosedAt, isRoomCurrentlyClosed } from './translations';
-import { LayoutGrid, Calendar, BarChart3, Settings, Check, XCircle, AlertCircle, BookOpen, Menu, X } from 'lucide-react';
+import { LayoutGrid, Calendar, BarChart3, Settings, Check, XCircle, AlertCircle, BookOpen, Menu, Trophy, X } from 'lucide-react';
 import { TermsModal, AccessDeniedOverlay } from './components/TermsModal';
 import { UserGuideModal } from './components/UserGuideModal';
 import { collection, onSnapshot, setDoc, doc, deleteDoc, updateDoc, serverTimestamp, query, where, deleteField } from 'firebase/firestore';
@@ -21,7 +22,7 @@ import { db, auth, functions, handleFirestoreError, OperationType, testFirestore
 import { isBookingNoCheckIn, isBookingRoomInUse } from './utils/bookingStatus';
 import { createPortableBooking, getPortableBookings, getPortableMaintenanceHistory, getPortableRooms, isPortableMailApiEnabled, lookupPortableMailbox, requestPortableLocalNetworkAccess, runPortableAdminTool, sendPortableBookingVerificationEmail } from './utils/portableMailApi';
 
-type AppView = 'grid' | 'dashboard' | 'admin';
+type AppView = 'grid' | 'dashboard' | 'leaderboard' | 'admin';
 type RouteMode = 'app' | 'verify';
 
 const USER_DEFAULT_VIEW: AppView = 'dashboard';
@@ -321,7 +322,7 @@ const SmartRoomApplication: React.FC = () => {
 
     try {
       const saved = localStorage.getItem('smartroom_view');
-      return (saved === 'grid' || saved === 'dashboard') ? saved : USER_DEFAULT_VIEW;
+      return (saved === 'grid' || saved === 'dashboard' || saved === 'leaderboard') ? saved : USER_DEFAULT_VIEW;
     } catch (e) {
       return USER_DEFAULT_VIEW;
     }
@@ -330,7 +331,7 @@ const SmartRoomApplication: React.FC = () => {
   const navigateToView = (view: AppView) => {
     try {
       const targetPath = view === 'admin' ? '/admin' : '/';
-      if (window.location.pathname !== targetPath) {
+      if (window.location.pathname !== targetPath || window.history.state?.smartroomView !== view) {
         window.history.pushState({ smartroomView: view }, '', targetPath);
       }
     } catch (e) {
@@ -365,11 +366,17 @@ const SmartRoomApplication: React.FC = () => {
   }, [currentView]);
 
   useEffect(() => {
-    const handlePopState = () => {
-      setCurrentView(prev => {
-        if (isAdminRoutePath()) return 'admin';
-        return prev === 'admin' ? USER_DEFAULT_VIEW : prev;
-      });
+    const handlePopState = (event: PopStateEvent) => {
+      if (isAdminRoutePath()) {
+        setCurrentView('admin');
+        return;
+      }
+      const savedView = event.state?.smartroomView;
+      setCurrentView(
+        savedView === 'grid' || savedView === 'dashboard' || savedView === 'leaderboard'
+          ? savedView
+          : USER_DEFAULT_VIEW,
+      );
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -582,6 +589,7 @@ const SmartRoomApplication: React.FC = () => {
               ...booking,
               startTime: new Date(booking.startTime),
               endTime: new Date(booking.endTime),
+              createdAt: booking.createdAt ? new Date(booking.createdAt) : undefined,
               actualStartTime: booking.actualStartTime ? new Date(booking.actualStartTime) : undefined,
               actualEndTime: booking.actualEndTime ? new Date(booking.actualEndTime) : undefined,
               verifiedAt: booking.verifiedAt ? new Date(booking.verifiedAt) : undefined,
@@ -663,6 +671,7 @@ const SmartRoomApplication: React.FC = () => {
 
           const actualStart = parseFirestoreDate(data.actualStartTime);
           const actualEnd = parseFirestoreDate(data.actualEndTime);
+          const createdAt = parseFirestoreDate(data.createdAt);
           const verificationEmailScheduledAt = parseFirestoreDate(data.verificationEmailScheduledAt);
           const verificationWindowOpenedAt = parseFirestoreDate(data.verificationWindowOpenedAt);
           const verificationWindowClosedAt = parseFirestoreDate(data.verificationWindowClosedAt);
@@ -672,6 +681,7 @@ const SmartRoomApplication: React.FC = () => {
             id: docSnap.id,
             startTime: start,
             endTime: end,
+            createdAt,
             actualStartTime: actualStart,
             actualEndTime: actualEnd,
             verificationEmailScheduledAt,
@@ -691,6 +701,7 @@ const SmartRoomApplication: React.FC = () => {
           ...b,
           startTime: b.startTime ? new Date(b.startTime) : new Date(),
           endTime: b.endTime ? new Date(b.endTime) : new Date(),
+          createdAt: parseFirestoreDate(b.createdAt),
           actualStartTime: parseFirestoreDate(b.actualStartTime),
           actualEndTime: parseFirestoreDate(b.actualEndTime),
           verificationEmailScheduledAt: parseFirestoreDate((b as any).verificationEmailScheduledAt),
@@ -1383,7 +1394,12 @@ const SmartRoomApplication: React.FC = () => {
 
         if (isPortableMailApiEnabled()) {
           const created = await createPortableBooking({ ...newBooking, startTime: newBooking.startTime.toISOString(), endTime: newBooking.endTime.toISOString() });
-          const portableBooking = { ...created.booking, startTime: new Date(String(created.booking.startTime)), endTime: new Date(String(created.booking.endTime)) } as Booking;
+          const portableBooking = {
+            ...created.booking,
+            startTime: new Date(String(created.booking.startTime)),
+            endTime: new Date(String(created.booking.endTime)),
+            createdAt: created.booking.createdAt ? new Date(String(created.booking.createdAt)) : new Date(),
+          } as Booking;
           setBookings((previous) => [...previous, portableBooking]);
           showBookingConfirmationModal(bookingData.startTime, created.status === 'sent' ? 'sent' : 'queued');
           if (created.status === 'failed') showNotification('Booking was saved, but the verification email could not be sent. Please contact an administrator.', 'error');
@@ -1498,7 +1514,12 @@ const SmartRoomApplication: React.FC = () => {
 
           if (isPortableMailApiEnabled()) {
             const created = await createPortableBooking({ ...newBooking, startTime: start.toISOString(), endTime: end.toISOString() });
-            const portableBooking = { ...created.booking, startTime: new Date(String(created.booking.startTime)), endTime: new Date(String(created.booking.endTime)) } as Booking;
+            const portableBooking = {
+              ...created.booking,
+              startTime: new Date(String(created.booking.startTime)),
+              endTime: new Date(String(created.booking.endTime)),
+              createdAt: created.booking.createdAt ? new Date(String(created.booking.createdAt)) : new Date(),
+            } as Booking;
             setBookings((previous) => [...previous, portableBooking]);
           } else {
             await setDoc(doc(db, 'bookings', newBookingId), newBooking);
@@ -1731,6 +1752,17 @@ const SmartRoomApplication: React.FC = () => {
                 </button>
 
                 <button
+                  onClick={() => {
+                    navigateToView('leaderboard');
+                    setIsMobileDrawerOpen(false);
+                  }}
+                  className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center space-x-3 ${currentView === 'leaderboard' ? 'bg-amber-50 text-amber-800' : 'text-slate-600 hover:bg-slate-50'} cursor-pointer`}
+                >
+                  <Trophy className="w-5 h-5" />
+                  <span>{language === 'th' ? 'อันดับการใช้ห้อง' : 'Leaderboard'}</span>
+                </button>
+
+                <button
                   type="button"
                   onClick={() => {
                     setIsUserGuideOpen(true);
@@ -1863,6 +1895,10 @@ const SmartRoomApplication: React.FC = () => {
               onActiveViewChange={setDashboardActiveView}
             />
           )
+        )}
+
+        {currentView === 'leaderboard' && (
+          <LeaderboardPage language={language} />
         )}
       </main>
 

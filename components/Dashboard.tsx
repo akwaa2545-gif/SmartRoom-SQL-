@@ -31,7 +31,8 @@ import ConfirmationModal from './ConfirmationModal';
 import { BOOKABLE_HOURS, BOOKING_START_HOUR, BOOKING_END_HOUR, DEPARTMENTS } from '../constants';
 import { functions } from '../firebase';
 import { BookingDisplayState, getBookingDisplayState as getSharedBookingDisplayState, isBookingNoCheckIn } from '../utils/bookingStatus';
-import { isPortableMailApiEnabled, lookupPortableMailbox, searchPortableMailboxes } from '../utils/portableMailApi';
+import { getPortableLeaderboard, isPortableMailApiEnabled, lookupPortableMailbox, PortableLeaderboard, searchPortableMailboxes } from '../utils/portableMailApi';
+import LeaderboardPanel, { LeaderboardBookingBadge } from './LeaderboardPanel';
 
 export type DashboardMainView = 'status' | 'timeline';
 
@@ -174,7 +175,35 @@ const Dashboard: React.FC<DashboardProps> = ({
     onActiveViewChange?.(view);
   };
   const [checkInBooking, setCheckInBooking] = useState<Booking | null>(null);
+  const [leaderboard, setLeaderboard] = useState<PortableLeaderboard | null>(null);
+  const [isLeaderboardLoading, setIsLeaderboardLoading] = useState(isPortableMailApiEnabled());
   const emailLookupRequestIdRef = useRef(0);
+
+  useEffect(() => {
+    if (!isPortableMailApiEnabled()) return;
+    let active = true;
+    const loadLeaderboard = async () => {
+      try {
+        const result = await getPortableLeaderboard();
+        if (active) setLeaderboard(result);
+      } catch {
+        // The booking dashboard remains usable if the optional leaderboard is unavailable.
+      } finally {
+        if (active) setIsLeaderboardLoading(false);
+      }
+    };
+    void loadLeaderboard();
+    const refresh = window.setInterval(() => void loadLeaderboard(), 60_000);
+    return () => {
+      active = false;
+      window.clearInterval(refresh);
+    };
+  }, []);
+
+  const leaderboardRanks = useMemo(
+    () => new Map((leaderboard?.bookingRanks || []).map((entry) => [entry.bookingId, entry.rank])),
+    [leaderboard],
+  );
 
   // Load selected room details
   const selectedRoom = useMemo(() => {
@@ -1037,6 +1066,12 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
       </div>
 
+      {isPortableMailApiEnabled() && (
+        <div className="mb-6">
+          <LeaderboardPanel leaderboard={leaderboard} isLoading={isLeaderboardLoading} language={language} />
+        </div>
+      )}
+
       {/* VIEW: ALL ROOMS MATRIX & EXTENSIONS */}
       {selectedRoomId === 'ALL' && (
         <div className="space-y-6">
@@ -1709,6 +1744,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                   {singleRoomBookings.map(b => {
                     const noCheckIn = isNoCheckIn(b);
                     const displayState = getBookingDisplayState(b);
+                    const leaderboardRank = leaderboardRanks.get(b.id);
                     return (
                       <div key={b.id} className={`rounded-lg border p-3.5 shadow-sm transition-all ${getBookingDepartmentClassForState(getBookingDisplayState(b), b.department)} ${noCheckIn ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-200 hover:border-orange-300 hover:bg-orange-50/60 hover:shadow-md'}`}>
                         <div className="space-y-2 text-sm font-semibold text-slate-800">
@@ -1716,9 +1752,12 @@ const Dashboard: React.FC<DashboardProps> = ({
                             <span className="font-mono text-xs font-extrabold tracking-wide text-slate-700 whitespace-nowrap">
                               {formatTimeLocal(b.startTime, language)} - {formatTimeLocal(b.endTime, language)}
                             </span>
-                            <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold border shrink-0 shadow-xs ${getBookingStatusBadgeClass(displayState, b.department)}`}>
-                              {getBookingDisplayLabel(b)}
-                            </span>
+                            <div className="flex shrink-0 items-center gap-1.5">
+                              {leaderboardRank && <LeaderboardBookingBadge rank={leaderboardRank} language={language} />}
+                              <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold border shadow-xs ${getBookingStatusBadgeClass(displayState, b.department)}`}>
+                                {getBookingDisplayLabel(b)}
+                              </span>
+                            </div>
                           </div>
                           <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-2.5">
                             <div className="grid grid-cols-[minmax(0,1fr)_minmax(118px,0.72fr)] items-center gap-x-4 gap-y-1.5">

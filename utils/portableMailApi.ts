@@ -117,6 +117,26 @@ export interface PortableMaintenanceHistoryRecord {
   createdAt?: string;
 }
 
+/** Public, privacy-safe monthly leaderboard information. Email addresses are never returned. */
+export interface PortableLeaderboardEntry {
+  rank: number;
+  displayName: string;
+  minutes: number;
+  bookings: number;
+}
+
+export interface PortableLeaderboardBookingRank {
+  bookingId: string;
+  rank: number;
+}
+
+export interface PortableLeaderboard {
+  periodStart: string;
+  periodEnd: string;
+  leaders: PortableLeaderboardEntry[];
+  bookingRanks: PortableLeaderboardBookingRank[];
+}
+
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const user = auth.currentUser || (await signInAnonymously(auth)).user;
   const token = await user.getIdToken();
@@ -135,6 +155,7 @@ export const getPortableRooms = () => request<{ rooms: PortableRoom[] }>('/api/r
 export const getPortableBookings = () => request<{ bookings: PortableBooking[] }>('/api/bookings');
 export const archivePortableExpiredBooking = (bookingId: string) => request<{ bookingId: string; archived: boolean }>(`/api/bookings/${encodeURIComponent(bookingId)}/archive-expired`, { method: 'POST' });
 export const getPortableMaintenanceHistory = () => request<{ history: PortableMaintenanceHistoryRecord[] }>('/api/room-maintenance-history');
+export const getPortableLeaderboard = () => request<PortableLeaderboard>('/api/leaderboard');
 
 export const requestPortableLocalNetworkAccess = async () => {
   if (!apiBaseUrl) return 'unavailable' as const;
