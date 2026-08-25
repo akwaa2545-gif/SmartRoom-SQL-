@@ -110,12 +110,12 @@ export const EditBookingModal: React.FC<EditBookingModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[calc(100vh-2rem)] animate-in fade-in zoom-in duration-200 overflow-hidden">
-        <form onSubmit={handleSubmit} className="flex max-h-[calc(100vh-2rem)] flex-col">
-          <div className="flex flex-shrink-0 justify-between items-center p-6 border-b border-slate-100">
-            <h3 className="text-lg font-bold text-slate-900">{language === 'th' ? 'แก้ไขรายการจอง' : 'Edit Booking'}</h3>
-            <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[calc(100dvh-1rem)] sm:max-h-[90vh] animate-in fade-in zoom-in duration-200 overflow-hidden flex flex-col">
+        <form onSubmit={handleSubmit} className="flex max-h-[calc(100dvh-1rem)] flex-col flex-1 min-h-0">
+          <div className="flex flex-shrink-0 justify-between items-center p-4 sm:p-6 border-b border-slate-100">
+            <h3 className="text-base sm:text-lg font-bold text-slate-900">{language === 'th' ? 'แก้ไขรายการจอง' : 'Edit Booking'}</h3>
+            <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors p-1">
               <X className="w-5 h-5" />
             </button>
           </div>

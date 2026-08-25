@@ -19,7 +19,7 @@ import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
 import { db, auth, functions, handleFirestoreError, OperationType, testFirestoreConnection } from './firebase';
 import { isBookingNoCheckIn, isBookingRoomInUse } from './utils/bookingStatus';
-import { createPortableBooking, getPortableBookings, getPortableMaintenanceHistory, getPortableRooms, isPortableMailApiEnabled, lookupPortableMailbox, requestPortableLocalNetworkAccess, sendPortableBookingVerificationEmail } from './utils/portableMailApi';
+import { createPortableBooking, getPortableBookings, getPortableMaintenanceHistory, getPortableRooms, isPortableMailApiEnabled, lookupPortableMailbox, requestPortableLocalNetworkAccess, runPortableAdminTool, sendPortableBookingVerificationEmail } from './utils/portableMailApi';
 
 type AppView = 'grid' | 'dashboard' | 'admin';
 type RouteMode = 'app' | 'verify';
@@ -70,6 +70,7 @@ const isFutureBookingDate = (date: Date) => {
 
 const getBookingConfirmationMessage = (startTime: Date, language: 'th' | 'en', emailStatus?: 'queued' | 'sent') => {
   const sendAt = new Date(startTime.getTime() - VERIFICATION_WINDOW_BEFORE_MS);
+  const now = new Date();
   const windowStart = sendAt;
   const windowEnd = new Date(startTime.getTime() + VERIFICATION_WINDOW_AFTER_MS);
   const sendLabel = formatBookingTime(sendAt, language);
@@ -78,10 +79,12 @@ const getBookingConfirmationMessage = (startTime: Date, language: 'th' | 'en', e
   const includeDate = isFutureBookingDate(startTime);
   const dateLabel = formatBookingDateLabel(startTime);
 
+  const isAlreadyPastSendTime = now.getTime() >= sendAt.getTime();
+
   if (language === 'th') {
     const bookingMessage = 'ระบบทำการออกเลขและยืนยันการจองตารางเวลาของคุณเรียบร้อยแล้ว!';
-    const emailMessage = emailStatus === 'sent'
-      ? 'อีเมลยืนยันของคุณถูกส่งแล้ว'
+    const emailMessage = (emailStatus === 'sent' || isAlreadyPastSendTime)
+      ? 'อีเมลยืนยันการเช็คอินของคุณถูกส่งเข้ากล่องจดหมายแล้ว'
       : includeDate
         ? `อีเมลยืนยันของคุณจะถูกส่งวันที่ ${dateLabel} เวลา ${sendLabel}`
         : `อีเมลยืนยันของคุณจะถูกส่งเวลา ${sendLabel}`;
@@ -93,8 +96,8 @@ const getBookingConfirmationMessage = (startTime: Date, language: 'th' | 'en', e
   }
 
   const bookingMessage = 'Your booking number has been generated and your time slot has been confirmed successfully!';
-  const emailMessage = emailStatus === 'sent'
-    ? 'Your verification email has been sent.'
+  const emailMessage = (emailStatus === 'sent' || isAlreadyPastSendTime)
+    ? 'Your verification email has been sent to your inbox.'
     : includeDate
       ? `Your verification email will be sent on ${dateLabel} at ${sendLabel}.`
       : `Your verification email will be sent at ${sendLabel}.`;
@@ -267,6 +270,8 @@ const SmartRoomApplication: React.FC = () => {
   const deletedBookingIdsRef = useRef<Set<string>>(new Set());
   const expiredClosureCleanupKeysRef = useRef<Set<string>>(new Set());
   const noShowRequestIdsRef = useRef<Set<string>>(new Set());
+  const bookingsRef = useRef<Booking[]>([]);
+  useEffect(() => { bookingsRef.current = bookings; }, [bookings]);
   const [roomStatusNow, setRoomStatusNow] = useState<Date>(() => new Date());
 
   const getClosureCleanupKey = (room: Room) => [
@@ -702,35 +707,36 @@ const SmartRoomApplication: React.FC = () => {
 
   // 3. Archive and remove bookings that are not checked in within 15 minutes of scheduled start time.
   useEffect(() => {
+    // FIX: archive ONE booking per tick to avoid Cloud Function rate limits.
+    // bookingsRef.current stays fresh via a separate sync effect, no dependency needed here.
     const checkAutoCancellation = async () => {
       const nowTime = new Date();
-      const bookingsToCancel = bookings.filter(b => {
+      const bookingToCancel = bookingsRef.current.find(b => {
         if (b.status === BookingStatus.REJECTED || b.status === BookingStatus.NO_SHOW) return false;
         if (noShowRequestIdsRef.current.has(b.id)) return false;
         if (b.actualStartTime) return false; // Already checked in
-
         const cutoffTime = new Date(b.startTime.getTime() + 15 * 60 * 1000);
         return nowTime > cutoffTime;
       });
 
-      for (const booking of bookingsToCancel) {
-        console.log(`Archiving missed check-in booking ${booking.id} (${booking.title}) after the allowed check-in window.`);
-        noShowRequestIdsRef.current.add(booking.id);
-        try {
-          await markBookingNoShow(booking.id);
-          deletedBookingIdsRef.current.add(booking.id);
-          setBookings(prev => prev.filter(b => b.id !== booking.id));
-        } catch (e) {
-          console.error("Failed to archive missed check-in booking:", e);
-          noShowRequestIdsRef.current.delete(booking.id);
-        }
+      if (!bookingToCancel) return;
+
+      noShowRequestIdsRef.current.add(bookingToCancel.id);
+      console.log(`Archiving missed check-in booking ${bookingToCancel.id} (${bookingToCancel.title}) after the allowed check-in window.`);
+      try {
+        await markBookingNoShow(bookingToCancel.id);
+        deletedBookingIdsRef.current.add(bookingToCancel.id);
+        setBookings(prev => prev.filter(b => b.id !== bookingToCancel.id));
+      } catch (e) {
+        console.error("Failed to archive missed check-in booking:", e);
+        noShowRequestIdsRef.current.delete(bookingToCancel.id);
       }
     };
 
     checkAutoCancellation();
     const interval = setInterval(checkAutoCancellation, 15000); // Check every 15 seconds
     return () => clearInterval(interval);
-  }, [bookings]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 3.5 Preserve past usage history by closing incomplete checked-in bookings at their scheduled end time
   useEffect(() => {
@@ -861,8 +867,11 @@ const SmartRoomApplication: React.FC = () => {
       confirmText: 'Delete',
       cancelText: 'Cancel',
       onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
         try {
-          if (adminUser) {
+          if (isPortableMailApiEnabled()) {
+            await runPortableAdminTool('delete_booking', { bookingId: id });
+          } else if (adminUser) {
             const deleteBookingAsAdmin = httpsCallable(functions, 'deleteBookingAsAdmin');
             await deleteBookingAsAdmin({
               bookingId: id,
@@ -879,6 +888,12 @@ const SmartRoomApplication: React.FC = () => {
           );
         } catch (e) {
           const err = getFirebaseErrorDetails(e);
+          if (err.code === 'not-found' || (err.message && err.message.toLowerCase().includes('not found'))) {
+            deletedBookingIdsRef.current.add(id);
+            setBookings(prev => prev.filter(b => b.id !== id));
+            showNotification('Booking successfully deleted', 'success');
+            return;
+          }
           console.error('Delete failed', {
             itemType: 'booking',
             collection: 'bookings',
@@ -895,8 +910,6 @@ const SmartRoomApplication: React.FC = () => {
             handleFirestoreError(e, OperationType.DELETE, `bookings/${id}`);
           } catch (loggingError) { }
         }
-
-        setConfirmModal(prev => ({ ...prev, isOpen: false }));
       }
     });
   };
@@ -932,13 +945,34 @@ const SmartRoomApplication: React.FC = () => {
 
   const handleVerifyBooking = async (id: string) => {
     try {
-      await updateDoc(doc(db, 'bookings', id), {
-        status: BookingStatus.VERIFIED,
-        verifiedAt: serverTimestamp(),
-        actualStartTime: serverTimestamp(),
-        actualEndTime: deleteField(),
-        verificationMethod: 'admin'
-      });
+      if (isPortableMailApiEnabled()) {
+        await runPortableAdminTool('update_booking_verify_status', {
+          bookingIds: [id],
+          targetStatus: 'VERIFIED'
+        });
+      } else {
+        const adminPayload = adminUser ? getAdminAuthPayload(adminUser) : null;
+        if (adminPayload) {
+          const runTool = httpsCallable(functions, 'runInternalAdminTool');
+          await runTool({
+            tool: 'update_booking_verify_status',
+            payload: {
+              bookingIds: [id],
+              targetStatus: 'VERIFIED'
+            },
+            admin: adminPayload,
+          });
+        } else {
+          await updateDoc(doc(db, 'bookings', id), {
+            status: BookingStatus.VERIFIED,
+            verifiedAt: serverTimestamp(),
+            actualStartTime: serverTimestamp(),
+            actualEndTime: deleteField(),
+            verificationMethod: 'admin'
+          });
+        }
+      }
+      setBookings(prev => prev.map(b => b.id === id ? { ...b, status: BookingStatus.VERIFIED, verifiedAt: new Date(), actualStartTime: new Date() } : b));
       showNotification(language === 'th' ? 'ยืนยันการใช้งานห้องเรียบร้อยแล้ว' : 'Booking verified successfully', 'success');
     } catch (e) {
       console.error("Failed to verify booking:", e);
@@ -956,10 +990,31 @@ const SmartRoomApplication: React.FC = () => {
       cancelText: language === 'th' ? 'ยกเลิก' : 'Cancel',
       onConfirm: async () => {
         try {
-          await updateDoc(doc(db, 'bookings', id), {
-            status: BookingStatus.REJECTED
-          });
-          showNotification(language === 'th' ? 'ปฏิเสธความปรารถนาสำเร็จ' : 'Booking rejected successfully', 'success');
+          if (isPortableMailApiEnabled()) {
+            await runPortableAdminTool('update_booking_verify_status', {
+              bookingIds: [id],
+              targetStatus: 'REJECTED'
+            });
+          } else {
+            const adminPayload = adminUser ? getAdminAuthPayload(adminUser) : null;
+            if (adminPayload) {
+              const runTool = httpsCallable(functions, 'runInternalAdminTool');
+              await runTool({
+                tool: 'update_booking_verify_status',
+                payload: {
+                  bookingIds: [id],
+                  targetStatus: 'REJECTED'
+                },
+                admin: adminPayload,
+              });
+            } else {
+              await updateDoc(doc(db, 'bookings', id), {
+                status: BookingStatus.REJECTED
+              });
+            }
+          }
+          setBookings(prev => prev.map(b => b.id === id ? { ...b, status: BookingStatus.REJECTED } : b));
+          showNotification(language === 'th' ? 'ปฏิเสธการจองสำเร็จ' : 'Booking rejected successfully', 'success');
         } catch (e) {
           console.error("Failed to reject booking:", e);
           showNotification(language === 'th' ? `การปฏิเสธไม่สำเร็จ: ${e instanceof Error ? e.message : String(e)}` : `Rejection failed: ${e instanceof Error ? e.message : String(e)}`, 'error');
@@ -1254,10 +1309,13 @@ const SmartRoomApplication: React.FC = () => {
           return false;
         }
 
-        const verificationWindowStart = new Date(bookingData.startTime.getTime() - VERIFICATION_WINDOW_BEFORE_MS);
-        const verificationWindowEnd = new Date(bookingData.startTime.getTime() + VERIFICATION_WINDOW_AFTER_MS);
         const nowForVerification = new Date();
         const nowForVerificationMs = nowForVerification.getTime();
+        const verificationWindowStart = new Date(bookingData.startTime.getTime() - VERIFICATION_WINDOW_BEFORE_MS);
+        const baseWindowEndMs = bookingData.startTime.getTime() + VERIFICATION_WINDOW_AFTER_MS;
+        const graceWindowEndMs = nowForVerificationMs + VERIFICATION_WINDOW_AFTER_MS;
+        const verificationWindowEnd = new Date(Math.max(baseWindowEndMs, graceWindowEndMs));
+
         if (nowForVerificationMs > verificationWindowEnd.getTime()) {
           showNotification(
             language === 'th'

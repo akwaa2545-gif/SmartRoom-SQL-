@@ -280,10 +280,10 @@ const BookingModal: React.FC<BookingModalProps> = ({ room, existingBookings, isO
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/50 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl overflow-hidden flex flex-col md:flex-row animate-in fade-in zoom-in duration-200 h-[calc(100dvh-1rem)] max-h-[760px] md:h-[700px]">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl overflow-hidden flex flex-col md:flex-row animate-in fade-in zoom-in duration-200 max-h-[calc(100dvh-1rem)] md:max-h-[88vh] h-[calc(100dvh-1rem)] md:h-auto">
 
                 {/* Left Side: Visual Timeline (07:00 - 19:00) */}
-                <div className="bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 p-4 sm:p-6 md:w-5/12 max-h-[36dvh] md:max-h-none overflow-hidden flex flex-col">
+                <div className="bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 p-4 sm:p-6 md:w-5/12 max-h-[36dvh] md:max-h-none overflow-hidden flex flex-col flex-shrink-0 md:flex-shrink">
                     <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-2 flex items-center flex-shrink-0">
                         <Clock className="w-4 h-4 mr-2 text-brand-500" />
                         {t.availabilityLabel} ({String(BOOKING_START_HOUR).padStart(2, '0')}:00 - {String(BOOKING_END_HOUR).padStart(2, '0')}:00)

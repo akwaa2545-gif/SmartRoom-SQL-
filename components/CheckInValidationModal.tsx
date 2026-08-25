@@ -53,14 +53,14 @@ const CheckInValidationModal: React.FC<CheckInValidationModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-2xl bg-white shadow-xl border border-slate-200 overflow-hidden">
-        <div className="flex items-start justify-between gap-4 border-b border-slate-100 p-5">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-2 sm:p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md max-h-[calc(100dvh-1rem)] sm:max-h-[90vh] rounded-2xl bg-white shadow-xl border border-slate-200 overflow-hidden flex flex-col">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 p-4 sm:p-5 flex-shrink-0">
           <div>
-            <h3 className="text-lg font-bold text-slate-900">
+            <h3 className="text-base sm:text-lg font-bold text-slate-900">
               {language === 'th' ? 'ยืนยันข้อมูลเพื่อ Check-in' : 'Verify Check-in'}
             </h3>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-0.5 text-xs sm:text-sm text-slate-500">
               {language === 'th'
                 ? 'กรอกเบอร์โต๊ะ 4 หลักที่ตรงกับรายการจองนี้'
                 : 'Enter the assigned 4-digit Desk Number for this booking.'}
@@ -69,14 +69,14 @@ const CheckInValidationModal: React.FC<CheckInValidationModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 flex-shrink-0"
             aria-label={language === 'th' ? 'ปิด' : 'Close'}
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 p-5">
+        <form onSubmit={handleSubmit} className="space-y-4 p-4 sm:p-5 overflow-y-auto flex-1 min-h-0">
           <div>
             <label className="mb-1.5 block text-sm font-semibold text-slate-700">
               {language === 'th' ? 'เบอร์โต๊ะ 4 หลัก' : '4-digit Desk Number'}

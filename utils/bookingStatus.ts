@@ -23,7 +23,10 @@ export const getBookingDisplayState = (booking: Booking, now: Date = new Date())
   }
 
   if (booking.status === BookingStatus.CONFIRMED) {
-    const verifyCutoffTime = startTime + CHECK_IN_WINDOW_AFTER_MS;
+    const createdAtTime = booking.createdAt ? booking.createdAt.getTime() : startTime;
+    const baseCutoff = startTime + CHECK_IN_WINDOW_AFTER_MS;
+    const graceCutoff = createdAtTime + CHECK_IN_WINDOW_AFTER_MS;
+    const verifyCutoffTime = Math.max(baseCutoff, graceCutoff);
     const verifyStartTime = startTime - 15 * 60 * 1000;
     if (nowTime >= verifyStartTime && nowTime <= verifyCutoffTime) return 'waitForVerify';
     if (nowTime > verifyCutoffTime) return 'noCheckIn';

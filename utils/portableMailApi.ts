@@ -3,7 +3,42 @@ import { auth } from '../firebase';
 
 const viteEnvironment = (import.meta as unknown as { env?: { VITE_SMARTROOM_API_URL?: string } }).env;
 const apiBaseUrl = (viteEnvironment?.VITE_SMARTROOM_API_URL || '').trim().replace(/\/+$/, '');
-let adminSessionToken = '';
+const ADMIN_SESSION_STORAGE_KEY = 'smartroom_portable_admin_session';
+const ADMIN_PASSWORD_STORAGE_KEY = 'smartroom_portable_admin_password';
+
+const getStoredAdminSessionToken = () => {
+  try {
+    return sessionStorage.getItem(ADMIN_SESSION_STORAGE_KEY) || '';
+  } catch {
+    return '';
+  }
+};
+
+const saveAdminSessionToken = (token: string) => {
+  try {
+    if (token) {
+      sessionStorage.setItem(ADMIN_SESSION_STORAGE_KEY, token);
+    } else {
+      sessionStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
+    }
+  } catch {
+    // Private browsing or restrictive browser settings can block session storage.
+  }
+};
+
+const savePortableAdminPassword = (password: string) => {
+  try {
+    if (password) {
+      sessionStorage.setItem(ADMIN_PASSWORD_STORAGE_KEY, password);
+    } else {
+      sessionStorage.removeItem(ADMIN_PASSWORD_STORAGE_KEY);
+    }
+  } catch {
+    // Private browsing or restrictive browser settings can block session storage.
+  }
+};
+
+let adminSessionToken = getStoredAdminSessionToken();
 
 export type LocalNetworkAccessResult = 'granted' | 'requested' | 'denied' | 'failed' | 'unavailable';
 
@@ -98,13 +133,21 @@ export const isPortableMailApiEnabled = () => Boolean(apiBaseUrl);
 
 export const getPortableRooms = () => request<{ rooms: PortableRoom[] }>('/api/rooms');
 export const getPortableBookings = () => request<{ bookings: PortableBooking[] }>('/api/bookings');
+export const archivePortableExpiredBooking = (bookingId: string) => request<{ bookingId: string; archived: boolean }>(`/api/bookings/${encodeURIComponent(bookingId)}/archive-expired`, { method: 'POST' });
 export const getPortableMaintenanceHistory = () => request<{ history: PortableMaintenanceHistoryRecord[] }>('/api/room-maintenance-history');
 
 export const requestPortableLocalNetworkAccess = async () => {
   if (!apiBaseUrl) return 'unavailable' as const;
 
   try {
-    const response = await fetch(`${apiBaseUrl}/health`, { mode: 'cors' });
+    // Explicitly mark this as a local-network request. Supporting Chrome/Edge
+    // versions use this to show their native Local network permission prompt.
+    // Older browsers ignore the extra fetch option and continue with CORS.
+    const response = await fetch(`${apiBaseUrl}/health`, {
+      mode: 'cors',
+      cache: 'no-store',
+      targetAddressSpace: 'local',
+    } as RequestInit & { targetAddressSpace: 'local' });
     if (!response.ok) return 'failed' as const;
     // A successful cross-origin health request proves that this browser was allowed
     // to reach the local-network API. Some Edge/Chrome versions do not expose the
@@ -120,12 +163,27 @@ export const loginPortableAdmin = async (username: string, password: string) => 
   const payload = await response.json().catch(() => ({})) as { success?: boolean; data?: { token?: string; user?: { id: string; username: string; role: 'SUPER_ADMIN' | 'APPROVER'; name?: string } }; error?: { message?: string } };
   if (!response.ok || !payload.success || !payload.data?.token || !payload.data.user) throw new Error(payload.error?.message || 'Admin login failed.');
   adminSessionToken = payload.data.token;
+  saveAdminSessionToken(adminSessionToken);
+  savePortableAdminPassword(password);
   return payload.data.user;
+};
+export const logoutPortableAdmin = () => {
+  adminSessionToken = '';
+  saveAdminSessionToken('');
+  savePortableAdminPassword('');
+};
+export const getPortableAdminPassword = () => {
+  try {
+    return sessionStorage.getItem(ADMIN_PASSWORD_STORAGE_KEY) || '';
+  } catch {
+    return '';
+  }
 };
 export const runPortableAdminTool = async <T>(tool: string, payload: Record<string, unknown>) => {
   if (!adminSessionToken) throw new Error('Please sign in to Admin again.');
   const response = await fetch(`${apiBaseUrl}/api/admin/tools`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${adminSessionToken}` }, body: JSON.stringify({ tool, payload }) });
   const result = await response.json().catch(() => ({})) as { success?: boolean; data?: T; error?: { message?: string } };
+  if (response.status === 401) logoutPortableAdmin();
   if (!response.ok || !result.success) throw new Error(result.error?.message || 'Admin tool request failed.');
   return result.data as T;
 };
@@ -133,6 +191,7 @@ export const getPortableAdminEmailHistory = async () => {
   if (!adminSessionToken) throw new Error('Please sign in to Admin again.');
   const response = await fetch(`${apiBaseUrl}/api/admin/email-history?limit=200`, { headers: { authorization: `Bearer ${adminSessionToken}` } });
   const result = await response.json().catch(() => ({})) as { success?: boolean; data?: { history?: unknown[] }; error?: { message?: string } };
+  if (response.status === 401) logoutPortableAdmin();
   if (!response.ok || !result.success) throw new Error(result.error?.message || 'Email history request failed.');
   return result.data?.history || [];
 };
