@@ -6,13 +6,27 @@ function createSafeBuildEnvironment(environment = process.env) {
   );
 }
 
-function createNpmRunner({ runner, apiRoot, environment = createSafeBuildEnvironment() }) {
+function createNpmRunner({
+  runner,
+  apiRoot,
+  environment = createSafeBuildEnvironment(),
+  platform = process.platform,
+  commandProcessor = process.env.ComSpec || 'cmd.exe',
+}) {
+  function npmInvocation(args) {
+    if (platform === 'win32')
+      return { file: commandProcessor, args: ['/d', '/s', '/c', 'npm.cmd', ...args] };
+    return { file: 'npm', args };
+  }
+
   async function install(targetApiRoot = apiRoot) {
-    await runner.run('npm.cmd', ['ci', '--omit=dev', '--ignore-scripts'], { cwd: targetApiRoot, environment });
+    const command = npmInvocation(['ci', '--omit=dev', '--ignore-scripts']);
+    await runner.run(command.file, command.args, { cwd: targetApiRoot, environment });
   }
 
   async function run() {
-    await runner.run('npm.cmd', ['test'], { cwd: apiRoot, environment });
+    const command = npmInvocation(['test']);
+    await runner.run(command.file, command.args, { cwd: apiRoot, environment });
   }
 
   async function installAndTest() {
