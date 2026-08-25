@@ -11,6 +11,10 @@ function waitForExit(child, timeoutMs) {
   });
 }
 
+function isAlreadyExitedTaskkillError(error) {
+  return /taskkill\.exe exited with code 128\./.test(error?.message || '');
+}
+
 function createApiProcessManager({
   apiRoot: defaultApiRoot,
   nodeExecutable = process.execPath,
@@ -45,11 +49,16 @@ function createApiProcessManager({
     const activeChild = child;
     activeChild.kill();
     await waitForExit(activeChild, stopTimeoutMs);
-    if (activeChild.exitCode === null)
-      await runner.run('taskkill.exe', ['/PID', String(activeChild.pid), '/T', '/F'], {
-        cwd: defaultApiRoot,
-        timeoutMs: stopTimeoutMs,
-      });
+    if (activeChild.exitCode === null) {
+      try {
+        await runner.run('taskkill.exe', ['/PID', String(activeChild.pid), '/T', '/F'], {
+          cwd: defaultApiRoot,
+          timeoutMs: stopTimeoutMs,
+        });
+      } catch (error) {
+        if (!isAlreadyExitedTaskkillError(error)) throw error;
+      }
+    }
     child = null;
   }
 

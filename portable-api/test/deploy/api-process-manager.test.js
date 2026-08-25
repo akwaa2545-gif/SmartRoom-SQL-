@@ -48,6 +48,29 @@ test('does not treat a killed child with no exit code as running', async () => {
   assert.equal(manager.isRunning(), false);
 });
 
+test('ignores taskkill code 128 when the child exits during forced shutdown', async () => {
+  const child = new EventEmitter();
+  child.exitCode = null;
+  child.killed = false;
+  child.pid = 1234;
+  child.kill = () => { child.killed = true; };
+  const manager = createApiProcessManager({
+    apiRoot: 'C:\\Deploy\\SmartRoom\\portable-api',
+    stopTimeoutMs: 1,
+    spawnImpl: () => child,
+    runner: {
+      run: async () => {
+        throw new Error('taskkill.exe exited with code 128.');
+      },
+    },
+  });
+
+  await manager.start({ DEPLOY_REVISION: 'abc123' });
+  await manager.stop();
+
+  assert.equal(manager.isRunning(), false);
+});
+
 test('uses an explicitly supplied verified release directory for the API process', async () => {
   const child = new EventEmitter();
   child.exitCode = null;
