@@ -1,0 +1,18 @@
+services:
+  smartroom-api:
+    image: ghcr.io/akwaa2545-gif/smartroom-sql-/smartroom-api:latest
+    container_name: smartroom-portable-api
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8787}:8787"
+    env_file:
+      - .env.docker
+    volumes:
+      # Mount service account credentials and SSL certs (if applicable)
+      - ./secrets:/app/secrets:ro
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8787/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
