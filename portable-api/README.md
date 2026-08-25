@@ -54,6 +54,12 @@ The website then sends its Firebase ID token to the API for mailbox search, book
 - Keep the command window/service running at all times. For production, configure a Windows service or Task Scheduler restart policy.
 - Rotate any SQL or Power Automate credential that was shared outside the secured PC.
 
+## Automatic Windows deployment
+
+For a dedicated non-Docker deployment clone, use `run-deployment-supervisor.cmd` and install the task through `install-deployment-agent-task.ps1`. The supervisor deploys only a healthy `origin/main` revision and rolls back failed releases. Follow [the deployment-agent runbook](../DEPLOYMENT_AGENT_RUNBOOK.md); do not run it from a development checkout or as `SYSTEM`.
+
+Before deploying an attested GitHub Release manually, use `download-verified-release.ps1 -Tag portable-api-v<version>`. It refuses ZIP archives that do not pass `gh attestation verify`.
+
 ## Limitations
 
 This phase migrates mail lookup, mail dispatch, and booking-token verification. Other Firebase Functions used by the admin tools remain separate and should be migrated in a later phase if Firebase billing is fully removed.

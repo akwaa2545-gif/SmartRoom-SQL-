@@ -14,6 +14,7 @@ dist-ssr
 .firebase/
 functions/.env
 portable-api/.env
+portable-api/.deploy-agent
 portable-api/secrets/
 portable-api/migration-backup-*.json
 portable-api/migration-backups/

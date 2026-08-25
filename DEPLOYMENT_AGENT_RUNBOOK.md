@@ -1,152 +1,115 @@
-# Deployment Agent Runbook
+# Portable API deployment agent
 
-Use this runbook to add a safe, self-updating deployment agent to a Node.js project on a dedicated Windows computer. The agent keeps a clean deployment clone aligned with one Git branch, verifies every release, and rolls back if the new version is unhealthy.
+This project can update the Portable API automatically on a dedicated Windows host without Docker. The agent polls GitHub Releases, downloads only an attested release ZIP, verifies it with GitHub CLI, and restores the last verified release if the new one is unhealthy.
 
-## What the agent does
+The agent must run from a dedicated deployment clone. Never install it in a development checkout.
 
-1. Starts the application at the current Git revision.
-2. Polls the configured remote branch on a fixed interval.
-3. When a new commit appears, stops the application, checks out that revision, installs production dependencies, and starts the application again.
-4. Calls a revision-aware health endpoint.
-5. If the new version is not healthy, restores the previous revision and restarts it.
+## Deployment contract
 
-Keep the deployment clone separate from development folders and uploaded files. The agent deliberately refuses to overwrite a clone with local changes.
-
-## Required application contract
-
-Every project using this pattern needs the following pieces.
-
-| Requirement | Purpose |
-| --- | --- |
-| A dedicated deployment branch, normally `main` | Defines the revision that production follows. |
-| Lockfile | Lets the agent install reproducible production dependencies with `npm ci --omit=dev`. |
-| Health endpoint | Confirms that the new process is serving the expected revision. |
-| Revision environment variable | Allows the health endpoint to prove that the process matches the deployed commit. |
-| Start and stop process manager | Ensures only one application process runs at a time. |
-| Clean deployment clone | Prevents release automation from modifying developer work. |
-
-For a Node.js application, expose a health response similar to this:
+The agent runs `portable-api/src/server.js` directly from a verified release directory and sets `DEPLOY_REVISION` to the verified release tag. The API responds to `GET /health` with:
 
 ```json
 {
   "success": true,
   "data": {
     "status": "ok",
-    "revision": "<DEPLOY_REVISION>"
+    "revision": "<release tag>"
   }
 }
 ```
 
-The deployment agent must set `DEPLOY_REVISION` when it starts the app and require the health response to return the same value.
+The agent accepts a release only when the health response includes that exact SHA.
 
-## Files to copy into a new project
+## Required files
 
-Adapt these files from this project:
-
-| File | Responsibility |
+| File | Purpose |
 | --- | --- |
-| `scripts/dashboard-supervisor.mjs` | Polling, deployment, health check, and rollback loop. Rename for the new project if preferred. |
-| `src/deploymentSupervisor.js` | Testable deployment and rollback workflow. |
-| `src/dashboardProcessManager.js` | Child-process running-state check. |
-| `src/deploymentCommand.js` | Windows-safe `npm` command invocation. |
-| `run-deployment-supervisor.cmd` | Windows entry point for the scheduled task. |
-| `test/deploymentSupervisor.test.js` | Deployment, rollback, and unchanged-revision tests. |
-| `test/dashboardProcessManager.test.js` | Restart-state regression tests. |
+| `portable-api/scripts/deployment-supervisor.js` | Polling entry point. |
+| `portable-api/src/deploy/deployment-supervisor.js` | Update, verification, and rollback workflow. |
+| `portable-api/src/deploy/git-repository.js` | Clean-clone checks and Git revision operations. |
+| `portable-api/src/deploy/api-process-manager.js` | Starts and stops the Node API process. |
+| `portable-api/src/deploy/health-probe.js` | Confirms that the deployed revision is healthy. |
+| `portable-api/run-deployment-supervisor.cmd` | Scheduled Task entry point. |
+| `portable-api/install-deployment-agent-task.ps1` | Creates the scheduled task for a dedicated account. |
 
-Update the application command, health URL, port, branch, and environment variables for the new project. Do not copy `.env` files, access tokens, or credential caches between machines or projects.
+## Prepare a deployment host
 
-## First-time setup on the deployment computer
-
-Run these commands in Command Prompt under the Windows account that will run the scheduled task:
+1. Create a dedicated Windows account such as `DOMAIN\smartroom-deploy`. Give it **Log on as a batch job**, Git access to this repository, read access to the Portable API secrets, and modify access only to the deployment clone.
+2. Install supported Node.js and Git for Windows for that account.
+3. Clone the repository into a deployment-only folder, for example:
 
 ```cmd
-git clone <REPOSITORY_URL> C:\Deploy\<PROJECT_NAME>
-cd /d C:\Deploy\<PROJECT_NAME>
-copy .env.example .env
+git clone --branch main <REPOSITORY_URL> C:\Deploy\SmartRoom
+cd /d C:\Deploy\SmartRoom\portable-api
 npm ci --omit=dev
-run-deployment-supervisor.cmd
 ```
 
-Configure `.env` with deployment-machine values only. Keep secrets in that file or the approved secret store; never commit them.
+4. Place the private `portable-api/.env` and `portable-api/secrets` files in that deployment clone. Do not copy them into Git or another repository.
+5. Configure the existing HTTP/IIS or direct-HTTPS host setup in the deployment clone if it has not already been done.
 
-After the first successful health check, create a Windows Scheduled Task with these settings:
+## Configure the deployment agent
 
-- Trigger: **At log on** for the dedicated deployment user.
-- Action: run `run-deployment-supervisor.cmd`.
-- Start in: `C:\Deploy\<PROJECT_NAME>`.
-- Run only while that dedicated user is logged on when interactive authentication is required.
-- Keep the task running continuously.
+Add these non-secret values to `portable-api/.env` as needed:
 
-## Normal release procedure
-
-1. Run the project test suite locally.
-2. Commit the release change.
-3. Push the tested commit to the deployment branch.
-4. Watch the deployment-agent log for the new revision and a healthy result.
-
-The default polling interval is five minutes. Set `DEPLOY_INTERVAL_MS` to change it; keep it at 60,000 milliseconds or higher.
-
-## Test the deployment agent
-
-After first-time setup or any deployment-agent change, push a harmless empty commit:
-
-```cmd
-git commit --allow-empty -m "chore: trigger deployment verification"
-git push origin main
+```env
+DEPLOY_REMOTE=origin
+DEPLOY_BRANCH=main
+DEPLOY_INTERVAL_MS=300000
+DEPLOY_HEALTH_URL=http://127.0.0.1:8787/health
+DEPLOY_HEALTH_TIMEOUT_MS=15000
+DEPLOY_START_TIMEOUT_MS=60000
 ```
 
-The log should show the new revision being deployed, a successful health check, and the supervisor staying alive. Confirm that the health endpoint reports that exact revision.
+`DEPLOY_INTERVAL_MS` must be at least `60000`. Use an HTTPS health URL when the API is configured for direct HTTPS. Do not set `DEPLOY_REVISION`; the supervisor supplies it to each API process.
 
-## Troubleshooting
+## Install the task
 
-### The process stops but will not start again
+Run an elevated PowerShell prompt on the deployment host:
 
-The process manager must check whether a child is actually running, not only whether its exit code is `null`. On Windows, a child can be marked `killed` before its exit event supplies an exit code. Use this guard in `start()`:
-
-```js
-if (this.isRunning()) throw new Error('Application is already running.');
+```powershell
+cd C:\Deploy\SmartRoom\portable-api
+.\install-deployment-agent-task.ps1 -TaskUser "DOMAIN\smartroom-deploy"
 ```
 
-Do not use only `child.exitCode === null`; it can prevent rollback and future deployments after a stop.
+Windows prompts for that account's Task Scheduler password. The installer writes a local `.deploy-agent` marker, removes the legacy `SmartRoom Portable API` task if it exists, and creates `SmartRoom Portable API Deployment Agent`. The marker is intentionally ignored by Git; it prevents the agent from updating an unmarked checkout.
 
-### The supervisor cannot deploy its own restart fix
+## Update sequence
 
-An already-running supervisor keeps its old code in memory. Stop it, update the deployment clone manually, reinstall production dependencies, then start it again:
+Every polling cycle, the agent:
 
-```cmd
-cd /d C:\Deploy\<PROJECT_NAME>
-git fetch origin main
-git reset --hard origin/main
-npm ci --omit=dev
-run-deployment-supervisor.cmd
+1. Queries the latest Portable API GitHub Release.
+2. Downloads `portable-api-release.zip` and verifies its GitHub attestation before extraction.
+3. Confirms the CI-generated manifest binds the verified archive to that exact release tag and commit.
+4. Leaves a current, healthy release alone; starts it if it is not healthy after a reboot.
+5. Extracts the verified release outside the deployment clone, installs its production dependencies with lifecycle scripts disabled, and stops the old API.
+6. Starts the verified release with `DEPLOY_REVISION` set to its tag and validates the health response.
+7. If any deployment step fails, restarts the previous verified release and confirms its health response.
+
+If both deployment and rollback fail, the task reports an error and does not claim a successful deployment. Inspect Task Scheduler history and the task account's process output before making changes.
+
+## Verification
+
+After task installation, verify the API health endpoint returns a revision rather than `unknown`. Then push a harmless change to `main` and confirm that the task reaches the new SHA within the configured interval.
+
+To test rollback, use a dedicated test deployment host and a deliberately failing revision. The previous revision must resume and `/health` must report its SHA.
+
+## Download a verified release
+
+The attested release workflow publishes `portable-api-release.zip` only for a `portable-api-v*` Git tag. On the host PC, download and verify a release before extracting or running it:
+
+```powershell
+cd C:\Deploy\SmartRoom\portable-api
+.\download-verified-release.ps1 -Tag portable-api-v1.0.0
 ```
 
-Use this only for the dedicated clean deployment clone. Do not run `git reset --hard` in a development folder with uncommitted work.
+The command uses GitHub CLI to download the release, runs `gh attestation verify`, and saves the ZIP only after verification succeeds. It does not extract or deploy the archive. Install GitHub CLI on the host first with `winget install GitHub.cli`.
 
-### A dependency is missing after an update
+## Security rules
 
-Install the current production dependency set, then restart the supervisor:
-
-```cmd
-npm ci --omit=dev
-run-deployment-supervisor.cmd
-```
-
-Ensure the dependency is declared in `dependencies`, not only `devDependencies`.
-
-### The agent refuses to update because of local changes
-
-Stop the agent and inspect the deployment clone. Remove unintended generated files from the clone or move legitimate local configuration into `.env`. The clone should contain only tracked application files, `node_modules`, and its local `.env`.
-
-### Health check fails after an update
-
-Read the application logs first. Common causes are a missing environment variable, unavailable database authentication, a port conflict, or a health endpoint that does not report the new `DEPLOY_REVISION`. The agent should roll back automatically; fix the cause, test it, and push a new commit.
-
-## Security checklist
-
-- Keep secrets and credential caches off Git.
-- Use a dedicated Windows account with only the access the application needs.
-- Restrict write access to the deployment directory.
-- Configure Git credentials only for the deployment account and repository.
-- Expose the health endpoint only where appropriate for the network.
-- Review the deployment clone before using a hard reset.
+- Keep `.env`, service-account files, certificates, and Git credential caches out of Git.
+- Do not run the agent as `SYSTEM`; use the dedicated deployment account.
+- Keep the API endpoint restricted to the intended network.
+- Do not run the task from a development folder.
+- The agent refuses tracked local changes; resolve them manually in the deployment clone before retrying.
+- Protect `main` and the deployment account's Git credentials. Anyone able to push to that branch can deploy code that receives the API's production secrets.
+- Restrict creation of `portable-api-v*` tags to release maintainers. CI refuses a release tag unless its commit is already reachable from protected `main`.

@@ -7,6 +7,7 @@ const admin = require("firebase-admin");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const sql = require("mssql");
 const { getConfig } = require("./config");
+const { createHealthResponse } = require("./health");
 const {
   ApiError,
   assertYageoEmail,
@@ -2058,7 +2059,7 @@ const requestHandler = async (request, response) => {
     limit(request);
     const url = new URL(request.url, "http://local");
     if (request.method === "GET" && url.pathname === "/health")
-      return json(response, 200, { success: true, data: { status: "ok" } });
+      return json(response, 200, createHealthResponse());
     if (request.method === "POST" && url.pathname === "/api/admin/session")
       return json(response, 200, {
         success: true,

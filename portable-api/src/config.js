@@ -86,4 +86,4 @@ function getConfig() {
   });
 }
 
-module.exports = { getConfig };
+module.exports = { getConfig, loadEnv };

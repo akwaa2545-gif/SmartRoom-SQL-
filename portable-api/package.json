@@ -6,6 +6,7 @@
   "engines": { "node": ">=20 <25" },
   "scripts": {
     "start": "node src/server.js",
+    "deploy-agent": "node scripts/deployment-supervisor.js",
     "test": "node --test"
   },
   "dependencies": {
