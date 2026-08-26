@@ -12,6 +12,7 @@ const {
   currentBangkokMonth,
   leaderboardEntries,
   rankedLeaderboardRows,
+  leaderboardScoresQuery,
 } = require("./leaderboard");
 const {
   ApiError,
@@ -546,32 +547,7 @@ async function listSqlLeaderboard(now = new Date()) {
     .input("periodStart", sql.DateTime2, start)
     .input("periodEnd", sql.DateTime2, end)
     .input("now", sql.DateTime2, now)
-    .query(`WITH Eligible AS (
-      SELECT Id, LOWER(LTRIM(RTRIM(Email))) AS EmailKey,
-        NULLIF(LTRIM(RTRIM(EmailDisplayName)), N'') AS EmailDisplayName,
-        StartTime, EndTime
-      FROM dbo.Bookings
-      WHERE Status = N'VERIFIED'
-        AND ActualStartTime IS NOT NULL
-        AND StartTime >= @periodStart
-        AND EndTime < @periodEnd
-        AND EndTime <= @now
-    ), Scores AS (
-      SELECT EmailKey, SUM(DATEDIFF_BIG(minute, StartTime, EndTime)) AS BookedMinutes,
-        COUNT_BIG(*) AS BookingCount
-      FROM Eligible
-      GROUP BY EmailKey
-    ), LatestNames AS (
-      SELECT EmailKey, EmailDisplayName,
-        ROW_NUMBER() OVER (PARTITION BY EmailKey ORDER BY StartTime DESC, Id DESC) AS RowNumber
-      FROM Eligible
-      WHERE EmailDisplayName IS NOT NULL
-    )
-    SELECT scores.EmailKey, COALESCE(names.EmailDisplayName, N'Room user') AS EmailDisplayName,
-      scores.BookedMinutes, scores.BookingCount
-    FROM Scores AS scores
-    LEFT JOIN LatestNames AS names
-      ON names.EmailKey = scores.EmailKey AND names.RowNumber = 1;`);
+    .query(leaderboardScoresQuery());
 
   const rankedRows = rankedLeaderboardRows(scoreResult.recordset);
   const leaders = leaderboardEntries(scoreResult.recordset);

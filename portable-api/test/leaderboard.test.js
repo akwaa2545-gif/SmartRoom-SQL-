@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
-const { currentBangkokMonth, leaderboardEntries } = require('../src/leaderboard');
+const { currentBangkokMonth, leaderboardEntries, leaderboardScoresQuery } = require('../src/leaderboard');
 
 test('uses Bangkok calendar-month boundaries', () => {
   const period = currentBangkokMonth(new Date('2026-01-31T18:00:00.000Z'));
@@ -30,4 +30,11 @@ test('returns a safe, deterministic top five leaderboard', () => {
     { rank: 5, displayName: 'User 1', minutes: 29 },
   ]);
   assert.ok(entries.every((entry) => !Object.hasOwn(entry, 'emailKey')));
+});
+
+test('uses SQL Server-compatible minute duration scoring', () => {
+  const query = leaderboardScoresQuery();
+
+  assert.match(query, /DATEDIFF\(minute, StartTime, EndTime\)/);
+  assert.doesNotMatch(query, /DATEDIFF_BIG/);
 });

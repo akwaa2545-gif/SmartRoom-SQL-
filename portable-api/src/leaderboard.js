@@ -13,6 +13,37 @@ function cleanDisplayName(value) {
   return typeof value === 'string' ? value.trim().slice(0, 200) : '';
 }
 
+function leaderboardScoresQuery() {
+  // DATEDIFF is supported by the SQL Server versions used by the on-prem API.
+  // Room bookings are short-lived, so minute totals cannot approach its range.
+  return `WITH Eligible AS (
+      SELECT Id, LOWER(LTRIM(RTRIM(Email))) AS EmailKey,
+        NULLIF(LTRIM(RTRIM(EmailDisplayName)), N'') AS EmailDisplayName,
+        StartTime, EndTime
+      FROM dbo.Bookings
+      WHERE Status = N'VERIFIED'
+        AND ActualStartTime IS NOT NULL
+        AND StartTime >= @periodStart
+        AND EndTime < @periodEnd
+        AND EndTime <= @now
+    ), Scores AS (
+      SELECT EmailKey, SUM(DATEDIFF(minute, StartTime, EndTime)) AS BookedMinutes,
+        COUNT_BIG(*) AS BookingCount
+      FROM Eligible
+      GROUP BY EmailKey
+    ), LatestNames AS (
+      SELECT EmailKey, EmailDisplayName,
+        ROW_NUMBER() OVER (PARTITION BY EmailKey ORDER BY StartTime DESC, Id DESC) AS RowNumber
+      FROM Eligible
+      WHERE EmailDisplayName IS NOT NULL
+    )
+    SELECT scores.EmailKey, COALESCE(names.EmailDisplayName, N'Room user') AS EmailDisplayName,
+      scores.BookedMinutes, scores.BookingCount
+    FROM Scores AS scores
+    LEFT JOIN LatestNames AS names
+      ON names.EmailKey = scores.EmailKey AND names.RowNumber = 1;`;
+}
+
 function rankedLeaderboardRows(rows) {
   const sorted = [...rows]
     .map((row) => ({
@@ -34,4 +65,4 @@ function leaderboardEntries(rows) {
   return rankedLeaderboardRows(rows).map(({ emailKey, ...entry }) => entry);
 }
 
-module.exports = { currentBangkokMonth, leaderboardEntries, rankedLeaderboardRows };
+module.exports = { currentBangkokMonth, leaderboardEntries, rankedLeaderboardRows, leaderboardScoresQuery };
