@@ -69,44 +69,35 @@ const isFutureBookingDate = (date: Date) => {
   return bookingDay.getTime() > today.getTime();
 };
 
-const getBookingConfirmationMessage = (startTime: Date, language: 'th' | 'en', emailStatus?: 'queued' | 'sent') => {
-  const sendAt = new Date(startTime.getTime() - VERIFICATION_WINDOW_BEFORE_MS);
+const getBookingConfirmationMessage = (startTime: Date, language: 'th' | 'en', _emailStatus?: 'queued' | 'sent') => {
   const now = new Date();
-  const windowStart = sendAt;
-  const windowEnd = new Date(startTime.getTime() + VERIFICATION_WINDOW_AFTER_MS);
-  const sendLabel = formatBookingTime(sendAt, language);
-  const windowStartLabel = formatBookingTime(windowStart, language);
-  const windowEndLabel = formatBookingTime(windowEnd, language);
+  const timeUntilStartMs = startTime.getTime() - now.getTime();
+  const REMINDER_THRESHOLD_MS = 15 * 60 * 1000;
+  const isEarlyBooking = timeUntilStartMs > REMINDER_THRESHOLD_MS;
+  const reminderTime = new Date(startTime.getTime() - REMINDER_THRESHOLD_MS);
+  const reminderTimeLabel = formatBookingTime(reminderTime, language);
   const includeDate = isFutureBookingDate(startTime);
   const dateLabel = formatBookingDateLabel(startTime);
 
-  const isAlreadyPastSendTime = now.getTime() >= sendAt.getTime();
-
   if (language === 'th') {
-    const bookingMessage = 'ระบบทำการออกเลขและยืนยันการจองตารางเวลาของคุณเรียบร้อยแล้ว!';
-    const emailMessage = (emailStatus === 'sent' || isAlreadyPastSendTime)
-      ? 'อีเมลยืนยันการเช็คอินของคุณถูกส่งเข้ากล่องจดหมายแล้ว'
-      : includeDate
-        ? `อีเมลยืนยันของคุณจะถูกส่งวันที่ ${dateLabel} เวลา ${sendLabel}`
-        : `อีเมลยืนยันของคุณจะถูกส่งเวลา ${sendLabel}`;
-    const confirmMessage = includeDate
-      ? `กรุณายืนยันวันที่ ${dateLabel} ระหว่าง ${windowStartLabel} - ${windowEndLabel}`
-      : `กรุณายืนยันระหว่าง ${windowStartLabel} - ${windowEndLabel}`;
-
-    return `${bookingMessage} ${emailMessage} ${confirmMessage} หากไม่ยืนยันภายในช่วงเวลานี้ ระบบจะยกเลิกการจองของคุณโดยอัตโนมัติ`;
+    const bookingMessage = 'บันทึกและยืนยันการจองห้องประชุมเรียบร้อยแล้ว!';
+    if (isEarlyBooking) {
+      const emailMessage = includeDate
+        ? `ระบบจะส่งอีเมลแจ้งเตือนการประชุมให้ในวันที่ ${dateLabel} เวลา ${reminderTimeLabel} (ล่วงหน้า 15 นาทีก่อนเริ่มประชุม)`
+        : `ระบบจะส่งอีเมลแจ้งเตือนการประชุมให้เวลา ${reminderTimeLabel} (ล่วงหน้า 15 นาทีก่อนเริ่มประชุม)`;
+      return `${bookingMessage} ${emailMessage} สามารถเข้าใช้งานห้องได้ตามเวลาที่จองไว้โดยไม่ต้องกดยืนยันเพิ่มเติม`;
+    }
+    return `${bookingMessage} เนื่องจากเป็นการจองกระชั้นชิด คุณสามารถเข้าใช้งานห้องประชุมได้ทันทีตามเวลาที่เลือกไว้`;
   }
 
-  const bookingMessage = 'Your booking number has been generated and your time slot has been confirmed successfully!';
-  const emailMessage = (emailStatus === 'sent' || isAlreadyPastSendTime)
-    ? 'Your verification email has been sent to your inbox.'
-    : includeDate
-      ? `Your verification email will be sent on ${dateLabel} at ${sendLabel}.`
-      : `Your verification email will be sent at ${sendLabel}.`;
-  const confirmMessage = includeDate
-    ? `Please confirm on ${dateLabel} between ${windowStartLabel} - ${windowEndLabel}.`
-    : `Please confirm between ${windowStartLabel} - ${windowEndLabel}.`;
-
-  return `${bookingMessage} ${emailMessage} ${confirmMessage} If you do not confirm within this time window, your booking will be automatically cancelled.`;
+  const bookingMessage = 'Your room booking has been confirmed successfully!';
+  if (isEarlyBooking) {
+    const emailMessage = includeDate
+      ? `A meeting reminder email will be sent on ${dateLabel} at ${reminderTimeLabel} (15 minutes prior to start time).`
+      : `A meeting reminder email will be sent at ${reminderTimeLabel} (15 minutes prior to start time).`;
+    return `${bookingMessage} ${emailMessage} You can use the room directly at your scheduled time without needing additional verification.`;
+  }
+  return `${bookingMessage} As this is an immediate booking, you can proceed directly to use the room at your scheduled time.`;
 };
 
 interface BookingConfirmationModalProps {
@@ -1321,22 +1312,14 @@ const SmartRoomApplication: React.FC = () => {
         }
 
         const nowForVerification = new Date();
-        const nowForVerificationMs = nowForVerification.getTime();
-        const verificationWindowStart = new Date(bookingData.startTime.getTime() - VERIFICATION_WINDOW_BEFORE_MS);
-        const baseWindowEndMs = bookingData.startTime.getTime() + VERIFICATION_WINDOW_AFTER_MS;
-        const graceWindowEndMs = nowForVerificationMs + VERIFICATION_WINDOW_AFTER_MS;
-        const verificationWindowEnd = new Date(Math.max(baseWindowEndMs, graceWindowEndMs));
-
-        if (nowForVerificationMs > verificationWindowEnd.getTime()) {
-          showNotification(
-            language === 'th'
-              ? 'ไม่สามารถสร้างการจองนี้ได้ เนื่องจากเลยช่วงเวลายืนยันแล้ว'
-              : 'This booking cannot be created because the verification window has already passed.',
-            'error'
-          );
-          return false;
-        }
-        const isInsideVerificationWindow = nowForVerificationMs >= verificationWindowStart.getTime() && nowForVerificationMs <= verificationWindowEnd.getTime();
+        const REMINDER_THRESHOLD_MS = 15 * 60 * 1000;
+        const nowMs = Date.now();
+        const startTimeMs = bookingData.startTime.getTime();
+        const timeUntilStartMs = startTimeMs - nowMs;
+        const shouldScheduleReminder = timeUntilStartMs > REMINDER_THRESHOLD_MS;
+        const reminderScheduledAt = shouldScheduleReminder
+          ? new Date(startTimeMs - REMINDER_THRESHOLD_MS)
+          : null;
 
         const newBookingId = Math.random().toString(36).substr(2, 9);
 
@@ -1384,10 +1367,10 @@ const SmartRoomApplication: React.FC = () => {
           endTime: bookingData.endTime,
           status: BookingStatus.CONFIRMED, // Automatically confirm new bookings
           createdAt: new Date(),
-          verificationEmailStatus: isInsideVerificationWindow ? 'sending' : 'queued',
-          verificationEmailScheduledAt: verificationWindowStart,
-          verificationWindowOpenedAt: verificationWindowStart,
-          verificationWindowClosedAt: verificationWindowEnd
+          verificationEmailStatus: shouldScheduleReminder ? 'queued' : 'skipped',
+          verificationEmailScheduledAt: reminderScheduledAt,
+          verificationWindowOpenedAt: reminderScheduledAt,
+          verificationWindowClosedAt: bookingData.endTime
         };
 
         newBooking.email = normalizedBookingEmail;
@@ -1401,40 +1384,11 @@ const SmartRoomApplication: React.FC = () => {
             createdAt: created.booking.createdAt ? new Date(String(created.booking.createdAt)) : new Date(),
           } as Booking;
           setBookings((previous) => [...previous, portableBooking]);
-          showBookingConfirmationModal(bookingData.startTime, created.status === 'sent' ? 'sent' : 'queued');
-          if (created.status === 'failed') showNotification('Booking was saved, but the verification email could not be sent. Please contact an administrator.', 'error');
+          showBookingConfirmationModal(bookingData.startTime, shouldScheduleReminder ? 'queued' : undefined);
           return true;
         }
         await setDoc(doc(db, 'bookings', newBookingId), newBooking);
-        try {
-          const verificationInfo = await sendVerificationEmail(newBookingId, newBooking.email);
-          showBookingConfirmationModal(bookingData.startTime, verificationInfo?.status);
-        } catch (emailError) {
-          const emailFailure = {
-            code: (emailError as any)?.code,
-            message: (emailError as any)?.message,
-            details: (emailError as any)?.details,
-          };
-          console.error(
-            "Booking was created, but verification email failed:",
-            JSON.stringify(emailFailure, null, 2),
-            emailError
-          );
-          const isEmailSetupFailure = emailFailure.details?.missingEnv ||
-            emailFailure.details?.invalidEnv ||
-            emailFailure.details?.code === 'email-service-not-configured' ||
-            emailFailure.details?.code === 'email-service-invalid-url';
-          showNotification(
-            isEmailSetupFailure
-              ? (language === 'th'
-                ? 'บันทึกการจองสำเร็จ แต่บริการส่งอีเมลยืนยันยังไม่ได้ตั้งค่า กรุณาติดต่อผู้ดูแลระบบ'
-                : 'Booking saved, but the verification email service is not configured. Please contact an administrator.')
-              : (language === 'th'
-                ? 'บันทึกการจองสำเร็จ แต่ส่งอีเมลยืนยันไม่สำเร็จ กรุณาติดต่อผู้ดูแลระบบ'
-                : 'Booking saved, but the verification email could not be sent. Please contact an administrator.'),
-            'error'
-          );
-        }
+        showBookingConfirmationModal(bookingData.startTime, shouldScheduleReminder ? 'queued' : undefined);
         return true;
       } else {
         // Dual argument structure (Legacy / modal form usage)
@@ -1893,12 +1847,18 @@ const SmartRoomApplication: React.FC = () => {
               setSelectedRoomId={setSelectedRoomId}
               activeView={dashboardActiveView}
               onActiveViewChange={setDashboardActiveView}
+              onNavigateToLeaderboard={() => navigateToView('leaderboard')}
             />
           )
         )}
 
         {currentView === 'leaderboard' && (
-          <LeaderboardPage language={language} />
+          <LeaderboardPage
+            language={language}
+            bookings={bookings}
+            rooms={rooms}
+            onNavigateBack={() => navigateToView('dashboard')}
+          />
         )}
       </main>
 

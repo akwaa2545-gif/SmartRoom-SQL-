@@ -115,14 +115,208 @@
         position: relative;
         z-index: 1;
       }
+      @keyframes goldGlow {
+        0%, 100% {
+          box-shadow: 0 0 8px 1px rgba(245, 158, 11, 0.55), 0 0 16px 3px rgba(251, 191, 36, 0.35);
+          border-color: #f59e0b !important;
+        }
+        50% {
+          box-shadow: 0 0 15px 3px rgba(245, 158, 11, 0.85), 0 0 28px 6px rgba(251, 191, 36, 0.55);
+          border-color: #fbbf24 !important;
+        }
+      }
+      @keyframes goldBorderShine {
+        0% { border-color: #d97706 !important; }
+        33% { border-color: #fbbf24 !important; }
+        66% { border-color: #fef08a !important; }
+        100% { border-color: #d97706 !important; }
+      }
+      .booking-frame-king-gold {
+        position: relative;
+        border: 2px solid #f59e0b !important;
+        animation: goldGlow 2.2s ease-in-out infinite, goldBorderShine 3s linear infinite;
+      }
+      .booking-frame-king-gold::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        border-radius: inherit;
+        background: radial-gradient(circle at 50% 0%, rgba(254, 240, 138, 0.18), transparent 70%);
+      }
+
+      @keyframes silverGlow {
+        0%, 100% {
+          box-shadow: 0 0 7px 1px rgba(148, 163, 184, 0.5), 0 0 14px 2px rgba(203, 213, 225, 0.3);
+          border-color: #94a3b8 !important;
+        }
+        50% {
+          box-shadow: 0 0 13px 2px rgba(148, 163, 184, 0.75), 0 0 22px 4px rgba(203, 213, 225, 0.5);
+          border-color: #cbd5e1 !important;
+        }
+      }
+      .booking-frame-master-silver {
+        position: relative;
+        border: 2px solid #94a3b8 !important;
+        animation: silverGlow 2.5s ease-in-out infinite;
+      }
+      .booking-frame-master-silver::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        border-radius: inherit;
+        background: radial-gradient(circle at 50% 0%, rgba(241, 245, 249, 0.18), transparent 70%);
+      }
+
+      @keyframes bronzeGlow {
+        0%, 100% {
+          box-shadow: 0 0 7px 1px rgba(217, 119, 6, 0.45), 0 0 14px 2px rgba(234, 88, 12, 0.3);
+          border-color: #b45309 !important;
+        }
+        50% {
+          box-shadow: 0 0 13px 2px rgba(217, 119, 6, 0.7), 0 0 22px 4px rgba(234, 88, 12, 0.45);
+          border-color: #d97706 !important;
+        }
+      }
+      .booking-frame-champion-bronze {
+        position: relative;
+        border: 2px solid #d97706 !important;
+        animation: bronzeGlow 2.8s ease-in-out infinite;
+      }
+      .booking-frame-champion-bronze::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        border-radius: inherit;
+        background: radial-gradient(circle at 50% 0%, rgba(254, 215, 170, 0.18), transparent 70%);
+      }
+
+      .booking-frame-top4-teal {
+        position: relative;
+        border: 2px solid #14b8a6 !important;
+        box-shadow: 0 0 8px 1px rgba(20, 184, 166, 0.45);
+      }
+      .booking-frame-top5-indigo {
+        position: relative;
+        border: 2px solid #6366f1 !important;
+        box-shadow: 0 0 8px 1px rgba(99, 102, 241, 0.45);
+      }
+
+      /* 3D Kawaii Cute Dancing & Active Running Cats (Rank 1: Orange 3D, Rank 2: Grey 3D, Rank 3: Caramel 3D) */
+      @keyframes catChibiDance3D {
+        0%, 100% { transform: perspective(220px) rotateY(0deg) translateY(0) rotate(0deg) scale(1); }
+        20% { transform: perspective(220px) rotateY(-16deg) translateY(-4px) rotate(-10deg) scale(1.1); }
+        40% { transform: perspective(220px) rotateY(16deg) translateY(1px) rotate(10deg) scale(0.95); }
+        60% { transform: perspective(220px) rotateY(-12deg) translateY(-5px) rotate(-8deg) scale(1.12); }
+        80% { transform: perspective(220px) rotateY(14deg) translateY(0) rotate(8deg) scale(0.98); }
+      }
+      @keyframes catFastRunFeet {
+        0%, 100% { transform: translateY(0) scale(1, 0.94); }
+        25% { transform: translateY(-5px) rotate(9deg) scale(1.08, 1.06); }
+        50% { transform: translateY(0) scale(1, 0.94); }
+        75% { transform: translateY(-5px) rotate(-9deg) scale(1.08, 1.06); }
+      }
+      @keyframes catTailWhip3D {
+        0%, 100% { transform: rotate(-35deg) scaleX(1); }
+        50% { transform: rotate(45deg) scaleX(0.8); }
+      }
+      @keyframes catPawsJoy3D {
+        0%, 100% { transform: translateY(0) rotate(0deg); }
+        25% { transform: translateY(-4px) rotate(-18deg) scale(1.15); }
+        75% { transform: translateY(-4px) rotate(18deg) scale(1.15); }
+      }
+      @keyframes crownGlowGold {
+        0%, 100% { transform: translateY(0) rotate(-4deg) scale(1); filter: drop-shadow(0 2px 4px #f59e0b) brightness(1.1); }
+        50% { transform: translateY(-5px) rotate(6deg) scale(1.18); filter: drop-shadow(0 4px 10px #fde047) brightness(1.35); }
+      }
+      @keyframes runSmokePuff3D {
+        0% { opacity: 1; transform: scale(0.4) translateY(0); }
+        100% { opacity: 0; transform: scale(1.8) translateY(-16px); }
+      }
+      @keyframes popEmotionBubble {
+        0% { opacity: 0; transform: scale(0.2) translateY(6px); }
+        50% { opacity: 1; transform: scale(1.25) translateY(-3px); }
+        100% { opacity: 1; transform: scale(1) translateY(0); }
+      }
+
+      @keyframes catSleepingBreathe {
+        0%, 100% { transform: translateY(2px) scale(1, 0.94) rotate(2deg); }
+        50% { transform: translateY(0px) scale(1.02, 1.02) rotate(0deg); }
+      }
+      @keyframes zzzFloat3D {
+        0% { opacity: 0; transform: translate(0, 2px) scale(0.6); }
+        30% { opacity: 1; transform: translate(3px, -5px) scale(1); }
+        70% { opacity: 0.9; transform: translate(6px, -13px) scale(1.15); }
+        100% { opacity: 0; transform: translate(9px, -20px) scale(0.7); }
+      }
+
+      .chibi-cat-3d-orange {
+        animation: catChibiDance3D 0.85s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+        transform-origin: bottom center;
+        filter: drop-shadow(0 3px 6px rgba(234, 88, 12, 0.45)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.12));
+      }
+      .chibi-cat-3d-grey {
+        animation: catChibiDance3D 1.05s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+        transform-origin: bottom center;
+        filter: drop-shadow(0 3px 6px rgba(100, 116, 139, 0.45)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.12));
+      }
+      .chibi-cat-3d-caramel {
+        animation: catChibiDance3D 1.2s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+        transform-origin: bottom center;
+        filter: drop-shadow(0 3px 6px rgba(180, 83, 9, 0.45)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.12));
+      }
+      .chibi-running-active {
+        animation: catFastRunFeet 0.3s ease-in-out infinite !important;
+        transform-origin: bottom center;
+      }
+      .chibi-sleeping-mode {
+        animation: catSleepingBreathe 2.4s ease-in-out infinite !important;
+        transform-origin: bottom center;
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.18));
+      }
+      .zzz-floating-3d {
+        animation: zzzFloat3D 2.2s ease-in-out infinite;
+      }
+      .chibi-tail-3d {
+        animation: catTailWhip3D 0.5s ease-in-out infinite;
+        transform-origin: bottom left;
+      }
+      .chibi-paws-3d {
+        animation: catPawsJoy3D 0.38s ease-in-out infinite;
+        transform-origin: center;
+      }
+      .chibi-crown-3d {
+        animation: crownGlowGold 1.1s ease-in-out infinite;
+        transform-origin: center bottom;
+      }
+      .smoke-puff-3d {
+        animation: runSmokePuff3D 0.55s ease-out forwards;
+      }
+      .bubble-pop-3d {
+        animation: popEmotionBubble 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+      }
+
       @media (prefers-reduced-motion: reduce) {
         .booking-it-neon,
         .booking-it-neon::after,
-        .booking-it-neon::before {
+        .booking-it-neon::before,
+        .booking-frame-king-gold,
+        .booking-frame-master-silver,
+        .booking-frame-champion-bronze,
+        .chibi-cat-3d-orange,
+        .chibi-cat-3d-grey,
+        .chibi-cat-3d-caramel,
+        .chibi-running-active,
+        .chibi-sleeping-mode,
+        .chibi-tail-3d,
+        .chibi-paws-3d,
+        .chibi-crown-3d {
           animation: none !important;
-          box-shadow: 0 0 12px rgba(0,245,255,0.7) !important;
-          border-color: #00f5ff !important;
-          outline-color: #00f5ff !important;
         }
       }
       .timeline-grid-scroll {

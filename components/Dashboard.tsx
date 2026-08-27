@@ -32,7 +32,8 @@ import { BOOKABLE_HOURS, BOOKING_START_HOUR, BOOKING_END_HOUR, DEPARTMENTS } fro
 import { functions } from '../firebase';
 import { BookingDisplayState, getBookingDisplayState as getSharedBookingDisplayState, isBookingNoCheckIn } from '../utils/bookingStatus';
 import { getPortableLeaderboard, isPortableMailApiEnabled, lookupPortableMailbox, PortableLeaderboard, searchPortableMailboxes } from '../utils/portableMailApi';
-import LeaderboardPanel, { LeaderboardBookingBadge } from './LeaderboardPanel';
+import { calculateLeaderboardStats, getLeaderboardHonorInfo } from '../utils/leaderboardStats';
+import LeaderboardPanel, { LeaderboardBookingBadge, TopRankHonorMascot } from './LeaderboardPanel';
 
 export type DashboardMainView = 'status' | 'timeline';
 
@@ -48,6 +49,7 @@ interface DashboardProps {
   setSelectedRoomId: (id: string) => void;
   activeView?: DashboardMainView;
   onActiveViewChange?: (view: DashboardMainView) => void;
+  onNavigateToLeaderboard?: () => void;
 }
 
 interface YageoMailboxUser {
@@ -69,7 +71,8 @@ const Dashboard: React.FC<DashboardProps> = ({
   selectedRoomId,
   setSelectedRoomId,
   activeView,
-  onActiveViewChange
+  onActiveViewChange,
+  onNavigateToLeaderboard
 }) => {
   const t = TRANSLATIONS[language];
   const checkInWindowTooltip = language === 'th'
@@ -204,6 +207,57 @@ const Dashboard: React.FC<DashboardProps> = ({
     () => new Map((leaderboard?.bookingRanks || []).map((entry) => [entry.bookingId, entry.rank])),
     [leaderboard],
   );
+
+  const currentMonthLeaderboardStats = useMemo(() => {
+    return calculateLeaderboardStats(bookings, rooms, 'current_month', leaderboard?.leaders);
+  }, [bookings, rooms, leaderboard]);
+
+  const organizerLeaderboardRankMap = useMemo(() => {
+    const map = new Map<string, number>();
+    currentMonthLeaderboardStats.users.forEach((u) => {
+      if (u.name) map.set(u.name.trim().toLowerCase(), u.rank);
+      if (u.employeeId) map.set(u.employeeId.trim().toLowerCase(), u.rank);
+      if (u.email) map.set(u.email.trim().toLowerCase(), u.rank);
+    });
+    return map;
+  }, [currentMonthLeaderboardStats]);
+
+  const departmentLeaderboardRankMap = useMemo(() => {
+    const map = new Map<string, number>();
+    currentMonthLeaderboardStats.departments.forEach((d) => {
+      if (d.department) {
+        map.set(d.department.trim().toLowerCase(), d.rank);
+      }
+    });
+    return map;
+  }, [currentMonthLeaderboardStats]);
+
+  const getBookingDepartmentRank = (booking?: Booking | null): number | undefined => {
+    if (!booking) return undefined;
+    const dept = (booking.department || booking.emailDepartment || '').trim().toLowerCase();
+    if (dept && dept !== '-' && dept !== 'other' && departmentLeaderboardRankMap.has(dept)) {
+      return departmentLeaderboardRankMap.get(dept);
+    }
+    return undefined;
+  };
+
+  const getBookingLeaderboardRank = (booking?: Booking | null): number | undefined => {
+    if (!booking) return undefined;
+    if (leaderboardRanks.has(booking.id)) {
+      return leaderboardRanks.get(booking.id);
+    }
+    const organizerKey = (booking.organizer || booking.emailDisplayName || '').trim().toLowerCase();
+    if (organizerKey && organizerLeaderboardRankMap.has(organizerKey)) {
+      return organizerLeaderboardRankMap.get(organizerKey);
+    }
+    if (booking.employeeId && organizerLeaderboardRankMap.has(booking.employeeId.trim().toLowerCase())) {
+      return organizerLeaderboardRankMap.get(booking.employeeId.trim().toLowerCase());
+    }
+    if (booking.email && organizerLeaderboardRankMap.has(booking.email.trim().toLowerCase())) {
+      return organizerLeaderboardRankMap.get(booking.email.trim().toLowerCase());
+    }
+    return undefined;
+  };
 
   // Load selected room details
   const selectedRoom = useMemo(() => {
@@ -930,152 +984,32 @@ const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </div>
 
-        {/* Date Controls */}
-        <div className="flex flex-col items-start md:items-end space-y-2 self-start md:self-auto shrink-0 select-none">
-          <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-sm relative">
-            <span className="text-xs font-bold text-slate-500 whitespace-nowrap shrink-0">
-              {language === 'th' ? 'วันที่ต้องการจอง:' : 'Booking Date:'}
-            </span>
-            <div className="relative">
-              {/* Toggle Button */}
-              <button
-                type="button"
-                id="booking-date-btn"
-                onClick={() => setIsCalendarOpen(!isCalendarOpen)}
-                className="flex items-center gap-2 pl-3 pr-3 py-1.5 bg-brand-50 hover:bg-brand-100 border border-brand-200 rounded-lg text-sm font-bold text-brand-700 transition-all cursor-pointer"
-              >
-                <Calendar className="w-4 h-4 text-brand-600" />
-                <span>
-                  {formatDate(selectedDateObj, language)}
-                </span>
-                <ChevronDown className={`w-4 h-4 text-brand-500 transition-transform duration-200 ${isCalendarOpen ? 'rotate-180' : ''}`} />
-              </button>
-
-              {/* Backdrop to close calendar when clicking outside */}
-              {isCalendarOpen && (
-                <div
-                  className="fixed inset-0 z-40 cursor-default"
-                  onClick={() => setIsCalendarOpen(false)}
-                />
-              )}
-
-              {/* Custom Calendar Dropdown */}
-              {isCalendarOpen && (
-                <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl shadow-xl border border-slate-200 p-4 z-50 animate-in fade-in zoom-in-95 duration-150">
-                  {/* Calendar Header */}
-                  <div className="flex items-center justify-between mb-3">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (calendarMonth === 0) {
-                          setCalendarMonth(11);
-                          setCalendarYear(y => y - 1);
-                        } else {
-                          setCalendarMonth(m => m - 1);
-                        }
-                      }}
-                      className="p-1 hover:bg-slate-100 rounded-lg text-slate-650 transition-colors"
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                    </button>
-                    <span className="text-sm font-extrabold text-slate-800">
-                      {language === 'th'
-                        ? `${['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'][calendarMonth]} ${calendarYear + 543}`
-                        : `${['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][calendarMonth]} ${calendarYear}`
-                      }
-                    </span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (calendarMonth === 11) {
-                          setCalendarMonth(0);
-                          setCalendarYear(y => y + 1);
-                        } else {
-                          setCalendarMonth(m => m + 1);
-                        }
-                      }}
-                      className="p-1 hover:bg-slate-100 rounded-lg text-slate-650 transition-colors"
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  {/* Weekdays Grid */}
-                  <div className="grid grid-cols-7 gap-1 text-center mb-1 text-[11px] font-bold text-slate-400">
-                    {(language === 'th' ? ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'] : ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']).map((day, idx) => (
-                      <div key={idx} className="py-1">
-                        {day}
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Days Grid */}
-                  <div className="grid grid-cols-7 gap-1 text-center">
-                    {calendarDays.map((day, idx) => {
-                      if (!day) {
-                        return <div key={`empty-${idx}`} />;
-                      }
-
-                      const isSelected =
-                        day.getDate() === selectedDateObj.getDate() &&
-                        day.getMonth() === selectedDateObj.getMonth() &&
-                        day.getFullYear() === selectedDateObj.getFullYear();
-
-                      const today = new Date();
-                      const isTodayDay =
-                        day.getDate() === today.getDate() &&
-                        day.getMonth() === today.getMonth() &&
-                        day.getFullYear() === today.getFullYear();
-
-                      return (
-                        <button
-                          key={`${day.getFullYear()}-${day.getMonth()}-${day.getDate()}`}
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const y = day.getFullYear();
-                            const m = String(day.getMonth() + 1).padStart(2, '0');
-                            const d = String(day.getDate()).padStart(2, '0');
-                            setDateStr(`${y}-${m}-${d}`);
-                            setIsCalendarOpen(false);
-                          }}
-                          className={`py-1 text-xs font-semibold rounded-lg transition-all active:scale-95 ${isSelected
-                            ? 'bg-brand-500 text-white font-bold animate-in fade-in duration-100'
-                            : isTodayDay
-                              ? 'bg-slate-100 text-brand-600 font-bold border border-brand-200'
-                              : 'hover:bg-slate-100 text-slate-700'
-                            }`}
-                        >
-                          {day.getDate()}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="text-[11px] font-bold text-slate-500 flex items-center space-x-1.5 bg-slate-50 border border-slate-200/60 rounded-lg py-1 px-2.5 w-full md:w-auto justify-center shadow-xs">
+        {/* Real-time Digital Clock & Live Sync */}
+        <div className="flex flex-col items-start md:items-end self-start md:self-auto shrink-0 select-none">
+          <div className="text-[11px] font-bold text-slate-600 flex items-center space-x-1.5 bg-white border border-slate-200/90 rounded-xl py-1.5 px-3 shadow-xs">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
             <span>
-              {language === 'th' ? 'เวลาปัจจุบัน:' : 'Current Time:'} <span className="font-mono font-extrabold text-slate-700 text-xs tracking-wider">{liveTime.toLocaleTimeString(language === 'th' ? 'th-TH' : 'en-US', { hour12: false })}</span> {language === 'th' ? 'น.' : ''}
+              {language === 'th' ? 'เวลาปัจจุบัน:' : 'Current Time:'} <span className="font-mono font-extrabold text-slate-800 text-xs tracking-wider">{liveTime.toLocaleTimeString(language === 'th' ? 'th-TH' : 'en-US', { hour12: false })}</span> {language === 'th' ? 'น.' : ''}
             </span>
           </div>
         </div>
       </div>
 
-      {isPortableMailApiEnabled() && (
-        <div className="mb-6">
-          <LeaderboardPanel leaderboard={leaderboard} isLoading={isLeaderboardLoading} language={language} />
-        </div>
-      )}
+      <div className="mb-6">
+        <LeaderboardPanel
+          leaderboard={leaderboard}
+          isLoading={isLeaderboardLoading}
+          language={language}
+          bookings={bookings}
+          rooms={rooms}
+          onViewFullLeaderboard={onNavigateToLeaderboard}
+        />
+      </div>
 
       {/* VIEW: ALL ROOMS MATRIX & EXTENSIONS */}
       {selectedRoomId === 'ALL' && (
         <div className="space-y-6">
-          {/* Subview Toggle */}
+          {/* Subview Toggle & Booking Date Picker */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 pb-3 gap-3">
             <div className="flex space-x-1.5 bg-slate-100/90 border border-slate-200/60 p-1 rounded-xl w-full sm:w-auto shadow-inner">
               <button
@@ -1102,8 +1036,131 @@ const Dashboard: React.FC<DashboardProps> = ({
               </button>
             </div>
 
-            <div className="text-xs text-slate-500 font-semibold">
-              {t.schedulesFor} {formatDate(selectedDateObj, language, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+            {/* Booking Date Picker replacing Schedules for */}
+            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm relative select-none self-end sm:self-center">
+              <span className="text-xs font-bold text-slate-500 whitespace-nowrap shrink-0">
+                {language === 'th' ? 'วันที่ต้องการจอง:' : 'Booking Date:'}
+              </span>
+              <div className="relative">
+                {/* Toggle Button */}
+                <button
+                  type="button"
+                  id="booking-date-btn"
+                  onClick={() => setIsCalendarOpen(!isCalendarOpen)}
+                  className="flex items-center gap-2 pl-3 pr-3 py-1.5 bg-brand-50 hover:bg-brand-100 border border-brand-200 rounded-lg text-xs font-bold text-brand-700 transition-all cursor-pointer shadow-2xs"
+                >
+                  <Calendar className="w-3.5 h-3.5 text-brand-600" />
+                  <span>
+                    {formatDate(selectedDateObj, language)}
+                  </span>
+                  <ChevronDown className={`w-3.5 h-3.5 text-brand-500 transition-transform duration-200 ${isCalendarOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {/* Backdrop to close calendar when clicking outside */}
+                {isCalendarOpen && (
+                  <div
+                    className="fixed inset-0 z-40 cursor-default"
+                    onClick={() => setIsCalendarOpen(false)}
+                  />
+                )}
+
+                {/* Custom Calendar Dropdown */}
+                {isCalendarOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl shadow-xl border border-slate-200 p-4 z-50 animate-in fade-in zoom-in-95 duration-150">
+                    {/* Calendar Header */}
+                    <div className="flex items-center justify-between mb-3">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (calendarMonth === 0) {
+                            setCalendarMonth(11);
+                            setCalendarYear(y => y - 1);
+                          } else {
+                            setCalendarMonth(m => m - 1);
+                          }
+                        }}
+                        className="p-1 hover:bg-slate-100 rounded-lg text-slate-650 transition-colors"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      <span className="text-sm font-extrabold text-slate-800">
+                        {language === 'th'
+                          ? `${['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'][calendarMonth]} ${calendarYear + 543}`
+                          : `${['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][calendarMonth]} ${calendarYear}`
+                        }
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (calendarMonth === 11) {
+                            setCalendarMonth(0);
+                            setCalendarYear(y => y + 1);
+                          } else {
+                            setCalendarMonth(m => m + 1);
+                          }
+                        }}
+                        className="p-1 hover:bg-slate-100 rounded-lg text-slate-650 transition-colors"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Weekdays Grid */}
+                    <div className="grid grid-cols-7 gap-1 text-center mb-1 text-[11px] font-bold text-slate-400">
+                      {(language === 'th' ? ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'] : ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']).map((day, idx) => (
+                        <div key={idx} className="py-1">
+                          {day}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Days Grid */}
+                    <div className="grid grid-cols-7 gap-1 text-center">
+                      {calendarDays.map((day, idx) => {
+                        if (!day) {
+                          return <div key={`empty-${idx}`} />;
+                        }
+
+                        const isSelected =
+                          day.getDate() === selectedDateObj.getDate() &&
+                          day.getMonth() === selectedDateObj.getMonth() &&
+                          day.getFullYear() === selectedDateObj.getFullYear();
+
+                        const today = new Date();
+                        const isTodayDay =
+                          day.getDate() === today.getDate() &&
+                          day.getMonth() === today.getMonth() &&
+                          day.getFullYear() === today.getFullYear();
+
+                        return (
+                          <button
+                            key={`${day.getFullYear()}-${day.getMonth()}-${day.getDate()}`}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const y = day.getFullYear();
+                              const m = String(day.getMonth() + 1).padStart(2, '0');
+                              const d = String(day.getDate()).padStart(2, '0');
+                              setDateStr(`${y}-${m}-${d}`);
+                              setIsCalendarOpen(false);
+                            }}
+                            className={`py-1 text-xs font-semibold rounded-lg transition-all active:scale-95 ${isSelected
+                              ? 'bg-brand-500 text-white font-bold animate-in fade-in duration-100'
+                              : isTodayDay
+                                ? 'bg-slate-100 text-brand-600 font-bold border border-brand-200'
+                                : 'hover:bg-slate-100 text-slate-700'
+                              }`}
+                          >
+                            {day.getDate()}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1245,12 +1302,18 @@ const Dashboard: React.FC<DashboardProps> = ({
                                 const b = item.data;
                                 const noCheckIn = isNoCheckIn(b);
                                 const displayState = getBookingDisplayState(b);
+                                const leaderboardRank = getBookingLeaderboardRank(b);
+                                const honor = getLeaderboardHonorInfo(leaderboardRank, language);
+                                const departmentRank = getBookingDepartmentRank(b);
+
                                 return (
-                                  <div key={b.id} className={`p-2 rounded-lg border text-[11px] transition-colors ${getBookingDepartmentClass(b.department, { context: 'timeline' })} ${noCheckIn ? 'border-rose-400 opacity-90' : b.id === roomStats.currentBooking?.id
+                                  <div key={b.id} className={`p-2 rounded-lg border text-[11px] transition-all relative ${
+                                    getBookingDepartmentClass(b.department, { context: 'timeline' })
+                                  } ${honor ? honor.frameClass : ''} ${noCheckIn ? 'border-rose-400 opacity-90' : b.id === roomStats.currentBooking?.id
                                     ? 'border-slate-300/50 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.35)]'
                                     : 'border-slate-300/40 hover:border-slate-400/60'
                                     }`}>
-                                    <div className="flex justify-between items-start mb-0.5">
+                                    <div className="flex justify-between items-start mb-0.5 gap-1.5">
                                       <span className="font-bold text-slate-800 truncate max-w-[130px]">
                                         {translateText(b.title, language)}
                                       </span>
@@ -1258,21 +1321,25 @@ const Dashboard: React.FC<DashboardProps> = ({
                                         {formatTimeLocal(b.startTime, language)} - {formatTimeLocal(b.endTime, language)}
                                       </span>
                                     </div>
-                                    <div className="flex items-center justify-between text-[10px] text-slate-500 font-semibold">
-                                      <div className="flex items-center">
-                                        <User className="w-2.5 h-2.5 mr-1 text-slate-400" />
-                                        <span>{b.organizer}</span>
+                                    <div className="flex items-center justify-between text-[10px] text-slate-500 font-semibold gap-1">
+                                      <div className="flex items-center truncate mr-1">
+                                        <User className="w-2.5 h-2.5 mr-1 text-slate-400 shrink-0" />
+                                        <span className="truncate flex items-center gap-1 font-bold text-slate-800">
+                                          {honor && <span title={`${honor.shortTitle} #${leaderboardRank}`}>{honor.icon}</span>}
+                                          <span className="truncate">{b.organizer}</span>
+                                        </span>
                                       </div>
-                                      {(() => {
-                                        return (
-                                          <span
-                                            title={displayState === 'waitForVerify' || displayState === 'roomInUse' || displayState === 'noCheckIn' ? checkInWindowTooltip : undefined}
-                                            className={`text-[9px] px-1.5 py-0.5 rounded font-bold border ${getBookingStatusBadgeClass(displayState, b.department, 'timeline')}`}
-                                          >
-                                            {getBookingDisplayLabel(b)}
-                                          </span>
-                                        );
-                                      })()}
+                                      <div className="flex items-center gap-1 shrink-0">
+                                        {departmentRank && departmentRank <= 3 && (
+                                          <TopRankHonorMascot rank={departmentRank} isUsed={displayState === 'used'} />
+                                        )}
+                                        <span
+                                          title={displayState === 'waitForVerify' || displayState === 'roomInUse' || displayState === 'noCheckIn' ? checkInWindowTooltip : undefined}
+                                          className={`text-[9px] px-1.5 py-0.5 rounded font-bold border ${getBookingStatusBadgeClass(displayState, b.department, 'timeline')}`}
+                                        >
+                                          {getBookingDisplayLabel(b)}
+                                        </span>
+                                      </div>
                                     </div>
                                   </div>
                                 );
@@ -1383,9 +1450,16 @@ const Dashboard: React.FC<DashboardProps> = ({
                                     colSpan += 1;
                                   }
 
+                                  const leaderboardRank = getBookingLeaderboardRank(booking);
+                                  const honor = getLeaderboardHonorInfo(leaderboardRank, language);
+                                  const departmentRank = getBookingDepartmentRank(booking);
+                                  const displayState = getBookingDisplayState(booking);
+
                                   renderedCells.push(
                                     <td key={`${hour}-${booking.id}`} colSpan={colSpan} className="px-1.5 py-1.5 relative h-24 border-r border-cyan-50 timeline-grid-slot">
-                                      <div className={`w-full h-full rounded-md flex flex-col justify-start py-1 text-left gap-0.5 border px-1.5 font-semibold overflow-hidden ${getBookingDepartmentClass(booking.department, { context: 'timeline' })}
+                                      <div className={`w-full h-full rounded-md flex flex-col justify-start py-1 text-left gap-0.5 border px-1.5 font-semibold overflow-hidden relative ${
+                                        getBookingDepartmentClass(booking.department, { context: 'timeline' })
+                                      } ${honor ? honor.frameClass : ''}
                                           ${isNoCheckInStatus
                                             ? 'border-rose-400 opacity-90 shadow-[inset_0_0_0_1px_rgba(244,63,94,0.1)]'
                                             : isPending
@@ -1396,12 +1470,20 @@ const Dashboard: React.FC<DashboardProps> = ({
                                       `}
                                         title={`[${getBookingDisplayLabel(booking)}] ${translateText(booking.title, language)} (${booking.organizer} - ${formatDepartment(booking.department) || '-'}) [${formatTimeValue(booking.startTime.getHours(), language)} - ${formatTimeValue(booking.endTime.getHours(), language)}]`}
                                       >
-                                        <span className={`self-start text-[8px] px-1.5 py-0.5 rounded font-bold border max-w-full truncate ${getBookingStatusBadgeClass(getBookingDisplayState(booking), booking.department, 'timeline')}`}>
-                                          {getBookingDisplayLabel(booking)}
-                                        </span>
+                                        <div className="flex items-center justify-between gap-1 w-full">
+                                          <span className={`self-start text-[8px] px-1.5 py-0.5 rounded font-bold border max-w-[70%] truncate ${getBookingStatusBadgeClass(getBookingDisplayState(booking), booking.department, 'timeline')}`}>
+                                            {getBookingDisplayLabel(booking)}
+                                          </span>
+                                          {departmentRank && departmentRank <= 3 && (
+                                            <TopRankHonorMascot rank={departmentRank} isUsed={displayState === 'used'} />
+                                          )}
+                                        </div>
                                         <div className="truncate text-[9.5px] text-slate-800 font-bold w-full bg-white/70 px-1.5 py-0.5 rounded border border-white/80 flex items-center">
                                           <span className="text-[7.5px] text-slate-500/70 mr-1 shrink-0 uppercase font-black">{language === 'th' ? 'ผู้จอง:' : 'Booker:'}</span>
-                                          <span className="truncate">{isNoCheckInStatus ? (language === 'th' ? 'ไม่มา Check-in' : 'No Check-in') : booking.organizer}</span>
+                                          <span className="truncate flex items-center gap-0.5">
+                                            {honor && <span className="text-[9px]" title={`${honor.shortTitle} #${leaderboardRank}`}>{honor.icon}</span>}
+                                            <span className="truncate">{isNoCheckInStatus ? (language === 'th' ? 'ไม่มา Check-in' : 'No Check-in') : booking.organizer}</span>
+                                          </span>
                                         </div>
                                         <div className="truncate text-[9px] text-slate-600 font-semibold w-full bg-white/50 px-1.5 py-0.5 rounded border border-white/60 flex items-center">
                                           <span className="text-[7.5px] text-slate-500/70 mr-1 shrink-0 uppercase font-black">{language === 'th' ? 'แผนก:' : 'Dept:'}</span>
@@ -1744,16 +1826,22 @@ const Dashboard: React.FC<DashboardProps> = ({
                   {singleRoomBookings.map(b => {
                     const noCheckIn = isNoCheckIn(b);
                     const displayState = getBookingDisplayState(b);
-                    const leaderboardRank = leaderboardRanks.get(b.id);
+                    const leaderboardRank = getBookingLeaderboardRank(b);
+                    const honor = getLeaderboardHonorInfo(leaderboardRank, language);
+                    const departmentRank = getBookingDepartmentRank(b);
                     return (
-                      <div key={b.id} className={`rounded-lg border p-3.5 shadow-sm transition-all ${getBookingDepartmentClassForState(getBookingDisplayState(b), b.department)} ${noCheckIn ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-200 hover:border-orange-300 hover:bg-orange-50/60 hover:shadow-md'}`}>
+                      <div key={b.id} className={`rounded-lg border p-3.5 shadow-sm transition-all relative ${
+                        getBookingDepartmentClassForState(getBookingDisplayState(b), b.department)
+                      } ${honor ? honor.frameClass : ''} ${noCheckIn ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-200 hover:border-orange-300 hover:bg-orange-50/60 hover:shadow-md'}`}>
                         <div className="space-y-2 text-sm font-semibold text-slate-800">
                           <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-2">
                             <span className="font-mono text-xs font-extrabold tracking-wide text-slate-700 whitespace-nowrap">
                               {formatTimeLocal(b.startTime, language)} - {formatTimeLocal(b.endTime, language)}
                             </span>
                             <div className="flex shrink-0 items-center gap-1.5">
-                              {leaderboardRank && <LeaderboardBookingBadge rank={leaderboardRank} language={language} />}
+                              {departmentRank && departmentRank <= 3 && (
+                                <TopRankHonorMascot rank={departmentRank} isUsed={displayState === 'used'} />
+                              )}
                               <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold border shadow-xs ${getBookingStatusBadgeClass(displayState, b.department)}`}>
                                 {getBookingDisplayLabel(b)}
                               </span>
@@ -1765,7 +1853,10 @@ const Dashboard: React.FC<DashboardProps> = ({
                                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white/80 text-slate-400 ring-1 ring-slate-200/70">
                                   <User className="h-3.5 w-3.5 opacity-55" />
                                 </span>
-                                <span className="truncate text-[14px] font-extrabold text-slate-950">{b.organizer || '-'}</span>
+                                <span className="truncate text-[14px] font-extrabold text-slate-950 flex items-center gap-1">
+                                  {honor && <span title={`${honor.shortTitle} #${leaderboardRank}`}>{honor.icon}</span>}
+                                  <span className="truncate">{b.organizer || '-'}</span>
+                                </span>
                               </div>
                               <div className="flex min-w-0 items-center gap-2 pl-1">
                                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white/80 text-slate-400 ring-1 ring-slate-200/70">

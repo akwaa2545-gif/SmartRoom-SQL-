@@ -285,50 +285,87 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
-function buildVerificationEmailPayload(email, bookingId, verifyUrl, booking) {
+async function getRoomName(roomId) {
+  if (!roomId) return "-";
+  try {
+    const snap = await db.collection("rooms").doc(roomId).get();
+    if (snap.exists) {
+      const data = snap.data();
+      return data.name || roomId;
+    }
+  } catch (e) {
+    // ignore
+  }
+  return roomId;
+}
+
+function buildVerificationEmailPayload(email, bookingId, verifyUrl, booking, roomName = "-") {
   const title = booking.title || "TOKIN Smart Room booking";
   const startTime = formatDateTimeForEmail(booking.startTime);
   const endTime = formatDateTimeForEmail(booking.endTime);
-  const checkInWindow = getCheckInWindow(booking);
-  const checkInOpensAt = checkInWindow ? formatDateTimeForEmail(checkInWindow.opensAt) : "";
-  const checkInClosesAt = checkInWindow ? formatDateTimeForEmail(checkInWindow.closesAt) : "";
+  const displayRoom = roomName && roomName !== "-" ? roomName : (booking.roomName || booking.roomId || "-");
 
   return {
     to: email,
-    subject: `[TOKIN Smart Room] Verify booking ${bookingId}`,
+    subject: `[TOKIN Smart Room] แจ้งเตือน: อีก 15 นาทีจะเริ่มการประชุม (${displayRoom})`,
     senderName: "TOKIN Smart Room",
     message: [
-      '<div style="margin:0;padding:24px;background:#fff7ed;font-family:Arial,Helvetica,sans-serif;color:#1f2937;">',
-      '<div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #fed7aa;border-radius:14px;overflow:hidden;">',
-      '<div style="background:#f97316;padding:22px 26px;color:#ffffff;">',
-      '<div style="font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;opacity:.9;">TOKIN Smart Room</div>',
-      '<div style="font-size:24px;line-height:30px;font-weight:800;margin-top:6px;">Booking Verification</div>',
+      '<div style="margin:0;padding:24px 12px;background:#f1f5f9;font-family:\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;">',
+      '<div style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:18px;overflow:hidden;box-shadow:0 10px 25px -5px rgba(0,0,0,0.07);">',
+      
+      '<!-- Header Banner -->',
+      '<div style="background:linear-gradient(135deg, #0284c7 0%, #0369a1 100%);padding:28px 24px;color:#ffffff;text-align:center;">',
+      '<div style="display:inline-block;background:rgba(255,255,255,0.2);padding:4px 14px;border-radius:20px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;">',
+      'TOKIN Smart Room',
       '</div>',
-      '<div style="padding:26px;">',
-      '<p style="margin:0 0 14px;font-size:15px;line-height:22px;">Hello,</p>',
-      '<p style="margin:0 0 20px;font-size:15px;line-height:22px;">Please verify your TOKIN Smart Room booking by pressing the button below during the allowed check-in window. This confirms the booking and records your check-in.</p>',
-      '<div style="border:1px solid #fed7aa;border-radius:12px;background:#fff7ed;padding:18px;margin:0 0 22px;">',
-      `<div style="font-size:18px;font-weight:800;color:#0f172a;margin-bottom:12px;">${escapeHtml(title)}</div>`,
-      '<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:14px;line-height:20px;">',
-      `<tr><td style="width:120px;padding:6px 0;color:#9a3412;font-weight:700;">Booking ID</td><td style="padding:6px 0;color:#0f172a;">${escapeHtml(bookingId)}</td></tr>`,
-      `<tr><td style="width:120px;padding:6px 0;color:#9a3412;font-weight:700;">Organizer</td><td style="padding:6px 0;color:#0f172a;">${escapeHtml(booking.organizer || "-")}</td></tr>`,
-      `<tr><td style="width:120px;padding:6px 0;color:#9a3412;font-weight:700;">Department</td><td style="padding:6px 0;color:#0f172a;">${escapeHtml(booking.department || "-")}</td></tr>`,
-      `<tr><td style="width:120px;padding:6px 0;color:#9a3412;font-weight:700;">Desk</td><td style="padding:6px 0;color:#0f172a;">${escapeHtml(booking.deskNumber || "-")}</td></tr>`,
-      `<tr><td style="width:120px;padding:6px 0;color:#9a3412;font-weight:700;">Time</td><td style="padding:6px 0;color:#0f172a;">${escapeHtml(startTime)} - ${escapeHtml(endTime)}</td></tr>`,
-      `<tr><td style="width:120px;padding:6px 0;color:#9a3412;font-weight:700;">Check-in window</td><td style="padding:6px 0;color:#0f172a;">${escapeHtml(checkInOpensAt)} - ${escapeHtml(checkInClosesAt)}</td></tr>`,
+      '<div style="font-size:22px;line-height:28px;font-weight:800;margin:0;">',
+      '⏳ อีก 15 นาทีจะถึงเวลาใช้งานห้องประชุม',
+      '</div>',
+      '<div style="font-size:13px;opacity:0.9;margin-top:6px;">',
+      'Meeting Room Starting in 15 Minutes',
+      '</div>',
+      '</div>',
+
+      '<!-- Content Container -->',
+      '<div style="padding:28px 24px;">',
+      `<p style="margin:0 0 12px;font-size:15px;line-height:22px;font-weight:700;color:#0f172a;">เรียนคุณ ${escapeHtml(booking.organizer || "ผู้จอง")},</p>`,
+      '<p style="margin:0 0 20px;font-size:14px;line-height:22px;color:#475569;">',
+      `คุณมีรายการจองห้องประชุม <strong>"${escapeHtml(displayRoom)}"</strong> ไว้ในช่วงเวลานี้ ระบบขอแจ้งเตือนว่า <strong>อีก 15 นาทีจะถึงเวลาเริ่มการประชุม</strong> โดยสามารถเข้าใช้งานห้องได้ตามกำหนดการดังนี้:`,
+      '</p>',
+
+      '<!-- Details Card -->',
+      '<div style="border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;padding:20px;margin:0 0 20px;">',
+      `<div style="font-size:16px;font-weight:800;color:#0369a1;margin-bottom:14px;border-bottom:1px solid #e2e8f0;padding-bottom:8px;">📌 ${escapeHtml(title)}</div>`,
+      '<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:13px;line-height:20px;">',
+      `<tr><td style="width:110px;padding:6px 0;color:#64748b;font-weight:700;">🏢 ห้องประชุม</td><td style="padding:6px 0;color:#0f172a;font-weight:800;">${escapeHtml(displayRoom)}</td></tr>`,
+      `<tr><td style="width:110px;padding:6px 0;color:#64748b;font-weight:700;">⏰ เวลาประชุม</td><td style="padding:6px 0;color:#0284c7;font-weight:800;">${escapeHtml(startTime)} - ${escapeHtml(endTime)}</td></tr>`,
+      `<tr><td style="width:110px;padding:6px 0;color:#64748b;font-weight:700;">👤 ผู้จอง</td><td style="padding:6px 0;color:#0f172a;font-weight:700;">${escapeHtml(booking.organizer || "-")}</td></tr>`,
+      `<tr><td style="width:110px;padding:6px 0;color:#64748b;font-weight:700;">🏢 แผนก</td><td style="padding:6px 0;color:#0f172a;">${escapeHtml(booking.department || "-")}</td></tr>`,
+      `<tr><td style="width:110px;padding:6px 0;color:#64748b;font-weight:700;">☎️ เบอร์โต๊ะ/ติดต่อ</td><td style="padding:6px 0;color:#0f172a;">${escapeHtml(booking.deskNumber || "-")}</td></tr>`,
+      `<tr><td style="width:110px;padding:6px 0;color:#64748b;font-weight:700;">🏷️ รหัสการจอง</td><td style="padding:6px 0;color:#64748b;">#${escapeHtml(bookingId)}</td></tr>`,
       '</table>',
       '</div>',
-      '<div style="text-align:center;margin:26px 0;">',
-      `<a href="${escapeHtml(verifyUrl)}" style="display:inline-block;background:#f97316;color:#ffffff;text-decoration:none;font-size:16px;font-weight:800;padding:13px 26px;border-radius:10px;">Verify Booking</a>`,
+
+      '<!-- Cancellation Notice Box (Highlight Extension 9) -->',
+      '<div style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:14px;padding:16px 18px;margin:0 0 20px;">',
+      '<div style="display:flex;align-items:center;margin-bottom:6px;">',
+      '<span style="font-size:18px;margin-right:8px;">📞</span>',
+      '<strong style="color:#b45309;font-size:14px;">ต้องการยกเลิกการจองหรือไม่?</strong>',
       '</div>',
-      '<div style="background:#ffffff;border:1px solid #fdba74;border-radius:10px;padding:12px 14px;margin:0 0 18px;color:#9a3412;font-size:13px;line-height:19px;">',
-      'For security, only use this email for your own booking. Do not forward the verification link.',
+      '<p style="margin:0;font-size:13px;line-height:20px;color:#92400e;">',
+      'หากท่าน <span style="font-weight:800;text-decoration:underline;">ไม่สะดวกใช้งาน หรือต้องการยกเลิกห้องประชุม</span> กรุณาติดต่อ <strong>เบอร์ 9 (โทรภายใน: เบอร์ 9)</strong> หรือแจ้งเจ้าหน้าที่ผู้ดูแลระบบ เพื่อทำการยกเลิกและเปิดให้ผู้อื่นสามารถเข้าใช้งานห้องต่อได้ครับ',
+      '</p>',
       '</div>',
-      '<p style="margin:0 0 8px;font-size:12px;line-height:18px;color:#64748b;">If the button does not work, copy and paste this URL into your browser:</p>',
-      `<p style="margin:0;font-size:12px;line-height:18px;word-break:break-all;color:#c2410c;">${escapeHtml(verifyUrl)}</p>`,
+
+      '<!-- Environmental Tip -->',
+      '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:12px 16px;color:#166534;font-size:12px;line-height:18px;">',
+      '🌱 <strong>ความร่วมมือในการใช้ห้อง:</strong> กรุณาช่วยรักษาความสะอาด ปิดไฟและเครื่องปรับอากาศเมื่อเสร็จสิ้นการประชุม',
       '</div>',
-      '<div style="padding:16px 26px;background:#fff7ed;border-top:1px solid #fed7aa;color:#9a3412;font-size:12px;line-height:18px;">',
-      'This is an automated message from TOKIN Smart Room.',
+      '</div>',
+
+      '<!-- Footer -->',
+      '<div style="padding:16px 24px;background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center;color:#94a3b8;font-size:11px;line-height:16px;">',
+      'ระบบบริหารจัดการห้องประชุม TOKIN Smart Room — อีเมลนี้เป็นการแจ้งเตือนอัตโนมัติ',
       '</div>',
       '</div>',
       '</div>',
@@ -818,15 +855,13 @@ async function dispatchVerificationEmailForBooking(bookingId, booking) {
     throw new HttpsError("failed-precondition", "Booking email is missing.");
   }
 
-  const verifyUrl = canonicalizeVerifyUrl(booking.verifyUrl, bookingId);
-
-  const emailPayload = buildVerificationEmailPayload(email, bookingId, verifyUrl, booking);
   const roomName = await getRoomName(booking.roomId);
+  const emailPayload = buildVerificationEmailPayload(email, bookingId, verifyUrl, booking, roomName);
   const historyBase = {
     recipientEmail: email,
     recipientName: booking.organizer || "",
     subject: emailPayload.subject,
-    purpose: "Booking Verification",
+    purpose: "Meeting Reminder",
     relatedBookingId: bookingId,
     relatedBookingTitle: booking.title || "",
     relatedRoomId: booking.roomId || "",
@@ -2222,28 +2257,17 @@ exports.processVerificationEmailQueue = onSchedule({
   const nowMs = Date.now();
 
   try {
-    const [queuedSnap, activeSnap] = await Promise.all([
-      db.collection("bookings")
-        .where("verificationEmailStatus", "==", "queued")
-        .get(),
-      db.collection("bookings")
-        .where("status", "==", "CONFIRMED")
-        .get(),
-    ]);
+    const queuedSnap = await db.collection("bookings")
+      .where("verificationEmailStatus", "==", "queued")
+      .get();
 
     for (const snap of queuedSnap.docs) {
       const booking = snap.data() || {};
-      const windowState = getCheckInWindowState(booking, nowMs);
-      if (windowState.state === "expired") {
-        await archiveMissedCheckInById(snap.id);
+      const scheduledAt = toDate(booking.verificationEmailScheduledAt);
+      if (!scheduledAt) {
         continue;
       }
 
-      if (windowState.state !== "active") {
-        continue;
-      }
-
-      const scheduledAt = toDate(booking.verificationEmailScheduledAt) || windowState.window.opensAt;
       if (nowMs < scheduledAt.getTime()) {
         continue;
       }
@@ -2251,19 +2275,11 @@ exports.processVerificationEmailQueue = onSchedule({
       try {
         await dispatchVerificationEmailForBooking(snap.id, booking);
       } catch (dispatchError) {
-        console.error("processVerificationEmailQueue: failed to dispatch email for booking", {
+        console.error("processVerificationEmailQueue: failed to dispatch reminder email for booking", {
           bookingId: snap.id,
           message: dispatchError && dispatchError.message,
           code: dispatchError && dispatchError.code,
         });
-      }
-    }
-
-    for (const snap of activeSnap.docs) {
-      const booking = snap.data() || {};
-      const windowState = getCheckInWindowState(booking, nowMs);
-      if (windowState.state === "expired") {
-        await archiveMissedCheckInById(snap.id);
       }
     }
   } catch (error) {

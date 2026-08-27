@@ -1,36 +1,82 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Crown, Trophy, X } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Trophy, X, Medal, Sparkles, Building2, Users, Calendar, ArrowRight, TrendingUp, Search } from 'lucide-react';
+import { Booking, Room } from '../types';
 import { PortableLeaderboard } from '../utils/portableMailApi';
+import { calculateLeaderboardStats, formatDurationHours, LeaderboardPeriod, UserLeaderboardItem, getLeaderboardHonorInfo } from '../utils/leaderboardStats';
+import { formatDepartment } from '../translations';
+import { getBookingDepartmentBadgeClass } from '../bookingVisualStyles';
 
 interface LeaderboardPanelProps {
   leaderboard: PortableLeaderboard | null;
   isLoading: boolean;
   language: 'th' | 'en';
+  bookings?: Booking[];
+  rooms?: Room[];
+  onViewFullLeaderboard?: () => void;
 }
 
-const formatDuration = (minutes: number) => {
-  const safeMinutes = Math.max(0, Math.round(minutes));
-  const hours = Math.floor(safeMinutes / 60);
-  const remainder = safeMinutes % 60;
-  if (hours === 0) return `${remainder}m`;
-  return remainder ? `${hours}h ${remainder}m` : `${hours}h`;
+export const podiumStyle = (rank: number) => {
+  if (rank === 1) return 'bg-amber-100 text-amber-900 border-amber-300 ring-amber-300/60 shadow-amber-100';
+  if (rank === 2) return 'bg-slate-100 text-slate-800 border-slate-300 ring-slate-300/60 shadow-slate-100';
+  if (rank === 3) return 'bg-amber-50 text-amber-800 border-amber-200 ring-amber-200/60 shadow-orange-100';
+  return 'bg-slate-50 text-slate-700 border-slate-200 ring-slate-200';
 };
 
-const podiumStyle = (rank: number) => {
-  if (rank === 1) return 'bg-amber-100 text-amber-800 ring-amber-300';
-  if (rank === 2) return 'bg-slate-100 text-slate-700 ring-slate-300';
-  if (rank === 3) return 'bg-orange-100 text-orange-800 ring-orange-300';
-  return 'bg-slate-50 text-slate-600 ring-slate-200';
+export const podiumGradient = (rank: number) => {
+  if (rank === 1) return 'from-amber-400 via-amber-500 to-yellow-600 text-white shadow-amber-500/25';
+  if (rank === 2) return 'from-slate-400 via-slate-500 to-slate-600 text-white shadow-slate-500/25';
+  if (rank === 3) return 'from-amber-600 via-amber-700 to-orange-700 text-white shadow-orange-500/25';
+  return 'from-slate-100 to-slate-200 text-slate-700 shadow-slate-200/50';
 };
 
-const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({ leaderboard, isLoading, language }) => {
+const getInitials = (name: string) => {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+};
+
+const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({
+  leaderboard,
+  isLoading,
+  language,
+  bookings = [],
+  rooms = [],
+  onViewFullLeaderboard,
+}) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [period, setPeriod] = useState<LeaderboardPeriod>('current_month');
+  const [activeTab, setActiveTab] = useState<'users' | 'rooms' | 'departments'>('users');
+  const [searchQuery, setSearchQuery] = useState('');
+
   const triggerRef = useRef<HTMLButtonElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const dialogRef = useRef<HTMLElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const wasOpenRef = useRef(false);
-  const title = language === 'th' ? 'ผู้นำการใช้ห้องประจำเดือน' : 'Monthly room leaders';
-  const empty = language === 'th' ? 'ยังไม่มีเวลาการจองที่ยืนยันแล้วในเดือนนี้' : 'No verified room time yet this month';
+
+  const stats = useMemo(() => {
+    return calculateLeaderboardStats(bookings, rooms, period, leaderboard?.leaders);
+  }, [bookings, rooms, period, leaderboard]);
+
+  const t = {
+    title: language === 'th' ? 'ทำเนียบการใช้ห้องประชุม' : 'Room Usage Leaderboard',
+    subtitle: language === 'th' ? 'จัดอันดับผู้ใช้และห้องที่มีการใช้งานสูงสุด' : 'Top room users & occupancy analytics',
+    thisMonth: language === 'th' ? 'เดือนนี้' : 'This Month',
+    lastMonth: language === 'th' ? 'เดือนก่อน' : 'Last Month',
+    allTime: language === 'th' ? 'สะสมทั้งหมด' : 'All Time',
+    topUsersTab: language === 'th' ? 'Top 20 ผู้ใช้งานสูงสุด' : 'Top 20 Organizers',
+    topRoomsTab: language === 'th' ? 'Top 20 ห้องยอดนิยม' : 'Top 20 Popular Rooms',
+    departmentsTab: language === 'th' ? 'Top 20 ตามแผนก' : 'Top 20 Departments',
+    viewFullLeaderboard: language === 'th' ? 'ดูหน้ารายละเอียดแบบเต็ม' : 'Open Full Leaderboard Page',
+    viewTopRankings: language === 'th' ? 'ดูอันดับ Leaderboard' : 'View Leaderboard',
+    noData: language === 'th' ? 'ยังไม่มีข้อมูลการใช้ห้องในช่วงเวลานี้' : 'No room bookings found in this period',
+    searchPlaceholder: language === 'th' ? 'ค้นหาชื่อผู้ใช้ หรือ แผนก...' : 'Search user or department...',
+    hoursLabel: language === 'th' ? 'ชั่วโมง' : 'Hours',
+    bookingsLabel: language === 'th' ? 'ครั้ง' : 'Bookings',
+    complianceLabel: language === 'th' ? 'เช็คอินสำเร็จ' : 'Verified',
+    utilizationLabel: language === 'th' ? 'อัตราการใช้' : 'Occupancy',
+    loading: language === 'th' ? 'กำลังคำนวณข้อมูล...' : 'Calculating statistics...',
+  };
 
   useEffect(() => {
     if (!isOpen) {
@@ -40,108 +86,1104 @@ const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({ leaderboard, isLoad
     }
     wasOpenRef.current = true;
     closeButtonRef.current?.focus();
+
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
         setIsOpen(false);
-        return;
-      }
-      if (event.key !== 'Tab') return;
-      const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      );
-      if (!focusable?.length) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
       }
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [isOpen]);
 
+  const topThreeUsers = useMemo(() => stats.users.slice(0, 3), [stats.users]);
+
+  const filteredUsers = useMemo(() => {
+    if (!searchQuery.trim()) return stats.users;
+    const q = searchQuery.toLowerCase();
+    return stats.users.filter(
+      (u) =>
+        u.name.toLowerCase().includes(q) ||
+        (u.department && u.department.toLowerCase().includes(q))
+    );
+  }, [stats.users, searchQuery]);
+
+  const filteredRooms = useMemo(() => {
+    if (!searchQuery.trim()) return stats.rooms;
+    const q = searchQuery.toLowerCase();
+    return stats.rooms.filter((r) => r.roomName.toLowerCase().includes(q));
+  }, [stats.rooms, searchQuery]);
+
+  const filteredDepartments = useMemo(() => {
+    if (!searchQuery.trim()) return stats.departments;
+    const q = searchQuery.toLowerCase();
+    return stats.departments.filter((d) => d.department.toLowerCase().includes(q));
+  }, [stats.departments, searchQuery]);
+
   return (
     <>
-      <button
-        type="button"
-        ref={triggerRef}
-        onClick={() => setIsOpen(true)}
-        className="w-full rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 via-white to-orange-50 p-4 text-left shadow-sm transition hover:border-amber-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-amber-400"
-        aria-haspopup="dialog"
-        aria-label={title}
-      >
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-400 text-amber-950 shadow-sm">
-              <Trophy className="h-5 w-5" aria-hidden="true" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-sm font-extrabold text-slate-900">{title}</p>
-              <p className="truncate text-xs font-medium text-slate-600">
-                {isLoading ? (language === 'th' ? 'กำลังโหลด…' : 'Loading…') : leaderboard?.leaders[0]?.displayName || empty}
-              </p>
+      <div className="mb-4 overflow-hidden rounded-2xl border border-amber-200/80 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-yellow-500/10 p-3 shadow-xs backdrop-blur-xs transition-all hover:border-amber-300">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-md shadow-amber-500/20">
+              <Trophy className="h-5 w-5" />
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <h3 className="font-black text-slate-900 text-sm tracking-tight flex items-center gap-1.5">
+                  <span>{t.title}</span>
+                  <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100/90 text-amber-800 border border-amber-200">
+                    <Sparkles className="h-3 w-3 mr-1 text-amber-600" />
+                    {stats.periodLabel[language]}
+                  </span>
+                </h3>
+              </div>
+
+              {isLoading ? (
+                <p className="text-xs text-slate-500 animate-pulse mt-0.5">{t.loading}</p>
+              ) : stats.users.length > 0 ? (
+                <div className="flex items-center gap-2 text-xs text-slate-600 mt-0.5 truncate">
+                  <span className="font-extrabold text-amber-700 flex items-center gap-1">
+                    🥇 #1 {stats.topUser?.name}
+                  </span>
+                  <span className="text-slate-300">•</span>
+                  <span className="font-semibold text-slate-700 truncate">
+                    {formatDurationHours(stats.topUser?.totalMinutes || 0, language)} ({stats.topUser?.totalBookings} {t.bookingsLabel})
+                  </span>
+                  {stats.topRoom && (
+                    <>
+                      <span className="hidden md:inline text-slate-300">•</span>
+                      <span className="hidden md:inline text-slate-500 truncate">
+                        🏢 {stats.topRoom.roomName} ({stats.topRoom.totalHours}h)
+                      </span>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500 mt-0.5">{t.noData}</p>
+              )}
             </div>
           </div>
-          <span className="shrink-0 text-xs font-bold text-amber-700">{language === 'th' ? 'ดู Top 5' : 'View Top 5'}</span>
-        </div>
-      </button>
 
+          <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+            {topThreeUsers.length > 0 && (
+              <div className="hidden lg:flex items-center -space-x-2 mr-1">
+                {topThreeUsers.map((user) => (
+                  <div
+                    key={user.rank}
+                    title={`#${user.rank} ${user.name} (${user.totalHours}h)`}
+                    className={`relative flex h-8 w-8 items-center justify-center rounded-full border-2 border-white text-xs font-black shadow-sm ring-1 ring-black/5 ${podiumStyle(user.rank)}`}
+                  >
+                    {getInitials(user.name)}
+                    <span className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-slate-900 text-[8px] font-bold text-white">
+                      {user.rank}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button
+              ref={triggerRef}
+              type="button"
+              onClick={() => setIsOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-3.5 py-1.5 text-xs font-bold text-white shadow-md shadow-amber-500/20 hover:from-amber-600 hover:to-orange-600 transition-all active:scale-95 cursor-pointer"
+            >
+              <span>{t.viewTopRankings}</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Full Pop-up Modal */}
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4" role="presentation" onMouseDown={() => setIsOpen(false)}>
-          <section
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-3 sm:p-4 animate-in fade-in duration-200"
+          role="presentation"
+          onMouseDown={() => setIsOpen(false)}
+        >
+          <LeaderboardFireworksCanvas active={isOpen} />
+
+          <div
             ref={dialogRef}
             role="dialog"
             aria-modal="true"
-            aria-labelledby="leaderboard-title"
-            aria-describedby="leaderboard-description"
-            className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl"
-            onMouseDown={(event) => event.stopPropagation()}
+            aria-labelledby="leaderboard-modal-title"
+            className="relative flex flex-col w-full max-w-2xl max-h-[90vh] rounded-3xl bg-white shadow-2xl border border-slate-200/80 overflow-hidden animate-in zoom-in-95 duration-200 z-10"
+            onMouseDown={(e) => e.stopPropagation()}
           >
-            <div className="mb-5 flex items-start justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-400 text-amber-950"><Crown className="h-5 w-5" /></span>
-                <div>
-                  <h2 id="leaderboard-title" className="font-extrabold text-slate-950">{title}</h2>
-                  <p id="leaderboard-description" className="text-xs text-slate-500">{language === 'th' ? 'เรียงตามเวลาที่จองและยืนยันแล้ว' : 'Ranked by verified booked time'}</p>
+            <div className="relative bg-gradient-to-br from-amber-500 via-orange-500 to-amber-600 px-6 pt-6 pb-5 text-white shadow-md">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-md text-white shadow-inner border border-white/30">
+                    <Trophy className="h-7 w-7 text-amber-200 drop-shadow" />
+                  </div>
+                  <div>
+                    <h2 id="leaderboard-modal-title" className="text-xl font-black text-white tracking-tight flex items-center gap-2">
+                      <span>{t.title}</span>
+                      <Medal className="h-5 w-5 text-amber-200" />
+                    </h2>
+                    <p className="text-xs text-amber-100 font-medium">{t.subtitle}</p>
+                  </div>
                 </div>
+
+                <button
+                  ref={closeButtonRef}
+                  type="button"
+                  onClick={() => setIsOpen(false)}
+                  className="rounded-full p-2 text-white/80 hover:bg-white/20 hover:text-white transition-colors cursor-pointer"
+                  aria-label={language === 'th' ? 'ปิด' : 'Close'}
+                >
+                  <X className="h-5 w-5" />
+                </button>
               </div>
-              <button ref={closeButtonRef} type="button" onClick={() => setIsOpen(false)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800" aria-label={language === 'th' ? 'ปิด' : 'Close'}>
-                <X className="h-5 w-5" />
+
+              <div className="mt-4 flex items-center justify-between gap-2">
+                <div className="inline-flex rounded-xl bg-black/20 backdrop-blur-md p-1 border border-white/20">
+                  <button
+                    type="button"
+                    onClick={() => setPeriod('current_month')}
+                    className={`px-3 py-1 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
+                      period === 'current_month' ? 'bg-white text-slate-900 shadow-sm' : 'text-white/80 hover:text-white'
+                    }`}
+                  >
+                    {t.thisMonth}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPeriod('last_month')}
+                    className={`px-3 py-1 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
+                      period === 'last_month' ? 'bg-white text-slate-900 shadow-sm' : 'text-white/80 hover:text-white'
+                    }`}
+                  >
+                    {t.lastMonth}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPeriod('all_time')}
+                    className={`px-3 py-1 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
+                      period === 'all_time' ? 'bg-white text-slate-900 shadow-sm' : 'text-white/80 hover:text-white'
+                    }`}
+                  >
+                    {t.allTime}
+                  </button>
+                </div>
+
+                <span className="text-xs text-amber-100/90 font-mono font-bold bg-white/10 px-2.5 py-1 rounded-lg border border-white/15">
+                  {stats.periodLabel[language]}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex border-b border-slate-200 bg-slate-50/80 px-6 pt-2">
+              <button
+                type="button"
+                onClick={() => setActiveTab('users')}
+                className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-extrabold transition-all cursor-pointer ${
+                  activeTab === 'users' ? 'border-amber-500 text-amber-700 bg-white rounded-t-lg' : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <Users className="h-4 w-4" />
+                <span>{t.topUsersTab}</span>
+                <span className="ml-1 rounded-full bg-slate-200/80 px-1.5 py-0.2 text-[10px] text-slate-700">
+                  {stats.users.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('rooms')}
+                className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-extrabold transition-all cursor-pointer ${
+                  activeTab === 'rooms' ? 'border-amber-500 text-amber-700 bg-white rounded-t-lg' : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <Building2 className="h-4 w-4" />
+                <span>{t.topRoomsTab}</span>
+                <span className="ml-1 rounded-full bg-slate-200/80 px-1.5 py-0.2 text-[10px] text-slate-700">
+                  {stats.rooms.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('departments')}
+                className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-extrabold transition-all cursor-pointer ${
+                  activeTab === 'departments' ? 'border-amber-500 text-amber-700 bg-white rounded-t-lg' : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <TrendingUp className="h-4 w-4" />
+                <span>{t.departmentsTab}</span>
+                <span className="ml-1 rounded-full bg-slate-200/80 px-1.5 py-0.2 text-[10px] text-slate-700">
+                  {stats.departments.length}
+                </span>
               </button>
             </div>
 
-            {isLoading ? (
-              <p className="py-8 text-center text-sm font-medium text-slate-500">{language === 'th' ? 'กำลังโหลด…' : 'Loading…'}</p>
-            ) : leaderboard?.leaders.length ? (
-              <ol className="space-y-2.5">
-                {leaderboard.leaders.map((leader) => (
-                  <li key={leader.rank} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-2.5">
-                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-extrabold ring-1 ${podiumStyle(leader.rank)}`}>{leader.rank}</span>
-                    <span className="min-w-0 flex-1 truncate text-sm font-bold text-slate-900">{leader.displayName}</span>
-                    <span className="shrink-0 text-xs font-bold text-slate-600">{formatDuration(leader.minutes)}</span>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <p className="rounded-xl bg-slate-50 px-4 py-8 text-center text-sm font-medium text-slate-500">{empty}</p>
+            <div className="px-6 py-2.5 bg-slate-50/50 border-b border-slate-100 flex items-center gap-2">
+              <Search className="h-4 w-4 text-slate-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={t.searchPlaceholder}
+                className="w-full bg-transparent text-xs text-slate-700 placeholder-slate-400 focus:outline-hidden"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="text-xs text-slate-400 hover:text-slate-600"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2.5 divide-y divide-slate-100/60 max-h-[50vh]">
+              {activeTab === 'users' && (
+                <>
+                  {filteredUsers.length === 0 ? (
+                    <div className="py-12 text-center text-slate-400 text-xs font-medium">
+                      {t.noData}
+                    </div>
+                  ) : (
+                    filteredUsers.map((user) => {
+                      const honor = getLeaderboardHonorInfo(user.rank, language);
+                      return (
+                        <div
+                          key={`${user.rank}-${user.name}`}
+                          className={`pt-2.5 first:pt-0 flex items-center justify-between gap-3 p-2 rounded-2xl transition-all hover:bg-slate-50 ${
+                            user.rank <= 3 ? 'bg-amber-50/30' : ''
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div
+                              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl font-black text-xs shadow-xs ${podiumStyle(user.rank)}`}
+                            >
+                              {user.rank === 1 ? '🥇' : user.rank === 2 ? '🥈' : user.rank === 3 ? '🥉' : `#${user.rank}`}
+                            </div>
+
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-extrabold text-slate-900 text-xs truncate">
+                                  {user.name}
+                                </span>
+                                {honor && (
+                                  <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${honor.badgeClass}`}>
+                                    <span>{honor.icon}</span>
+                                    <span>{honor.shortTitle}</span>
+                                  </span>
+                                )}
+                              </div>
+                              {user.department && (
+                                <span className={`inline-block mt-0.5 text-[10px] font-bold px-1.5 py-0.2 rounded border ${getBookingDepartmentBadgeClass(user.department)}`}>
+                                  {formatDepartment(user.department)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <div className="font-mono font-black text-amber-700 text-xs">
+                              {formatDurationHours(user.totalMinutes, language)}
+                            </div>
+                            <div className="text-[10px] text-slate-500 font-medium">
+                              {user.totalBookings} {t.bookingsLabel} • {user.complianceRate}% {t.complianceLabel}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </>
+              )}
+
+              {activeTab === 'rooms' && (
+                <>
+                  {filteredRooms.length === 0 ? (
+                    <div className="py-12 text-center text-slate-400 text-xs font-medium">
+                      {t.noData}
+                    </div>
+                  ) : (
+                    filteredRooms.map((room) => (
+                      <div
+                        key={`${room.rank}-${room.roomId}`}
+                        className="pt-2.5 first:pt-0 flex items-center justify-between gap-3 p-2 rounded-2xl transition-all hover:bg-slate-50"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div
+                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl font-black text-xs shadow-xs ${podiumStyle(room.rank)}`}
+                          >
+                            {room.rank === 1 ? '🥇' : room.rank === 2 ? '🥈' : room.rank === 3 ? '🥉' : `#${room.rank}`}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-extrabold text-slate-900 text-xs truncate">
+                              {room.roomName}
+                            </div>
+                            <div className="text-[10px] text-slate-500">
+                              {room.totalBookings} {t.bookingsLabel}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <div className="font-mono font-black text-amber-700 text-xs">
+                            {room.totalHours} {t.hoursLabel}
+                          </div>
+                          <div className="text-[10px] text-slate-500 font-semibold">
+                            {room.utilizationRate}% {t.utilizationLabel}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </>
+              )}
+
+              {activeTab === 'departments' && (
+                <>
+                  {filteredDepartments.length === 0 ? (
+                    <div className="py-12 text-center text-slate-400 text-xs font-medium">
+                      {t.noData}
+                    </div>
+                  ) : (
+                    filteredDepartments.map((dept) => (
+                      <div
+                        key={`${dept.rank}-${dept.department}`}
+                        className={`pt-2.5 first:pt-0 flex items-center justify-between gap-3 p-2 rounded-2xl transition-all hover:bg-slate-50 ${
+                          dept.rank <= 3 ? 'bg-amber-50/30' : ''
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div
+                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl font-black text-xs shadow-xs ${podiumStyle(dept.rank)}`}
+                          >
+                            {dept.rank === 1 ? '🥇' : dept.rank === 2 ? '🥈' : dept.rank === 3 ? '🥉' : `#${dept.rank}`}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`inline-block text-xs font-black px-2.5 py-0.5 rounded-lg border ${getBookingDepartmentBadgeClass(dept.department)}`}>
+                                {formatDepartment(dept.department, language)}
+                              </span>
+                              {dept.rank <= 3 && (
+                                <span className="text-xs">
+                                  {dept.rank === 1 ? '🍊' : dept.rank === 2 ? '🌪️' : '🍫'}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-slate-500 mt-0.5">
+                              {dept.totalBookings} {t.bookingsLabel} • {dept.percentageShare}% {language === 'th' ? 'ของการจองทั้งหมด' : 'of all bookings'}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <div className="font-mono font-black text-amber-700 text-xs">
+                            {dept.totalHours} {t.hoursLabel}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </>
+              )}
+            </div>
+
+            {onViewFullLeaderboard && (
+              <div className="border-t border-slate-200 bg-slate-50 px-6 py-3 flex items-center justify-between gap-3">
+                <span className="text-[11px] text-slate-500 font-medium">
+                  {language === 'th' ? 'ดูข้อมูลการใช้งานห้องแบบละเอียด' : 'Detailed meeting room occupancy analytics'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsOpen(false);
+                    onViewFullLeaderboard();
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 text-xs font-extrabold shadow-sm transition-all cursor-pointer"
+                >
+                  <span>{t.viewFullLeaderboard}</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
             )}
-          </section>
+          </div>
         </div>
       )}
     </>
   );
 };
 
-export const LeaderboardBookingBadge: React.FC<{ rank: number; language: 'th' | 'en' }> = ({ rank, language }) => (
-  <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-extrabold shadow-sm ${podiumStyle(rank)}`} title={language === 'th' ? `ผู้ติดอันดับ ${rank}` : `Leaderboard rank ${rank}`}>
-    <Trophy className="h-3 w-3" aria-hidden="true" />
-    {language === 'th' ? `Top ${rank}` : `Top ${rank}`}
-  </span>
-);
+export const LeaderboardFireworksCanvas: React.FC<{ active: boolean }> = ({ active }) => {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    if (!active) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let animId: number;
+    let width = (canvas.width = canvas.offsetWidth);
+    let height = (canvas.height = canvas.offsetHeight);
+
+    const handleResize = () => {
+      if (!canvas) return;
+      width = canvas.width = canvas.offsetWidth;
+      height = canvas.height = canvas.offsetHeight;
+    };
+    window.addEventListener('resize', handleResize);
+
+    interface Particle {
+      x: number;
+      y: number;
+      vx: number;
+      vy: number;
+      size: number;
+      color: string;
+      alpha: number;
+      decay: number;
+      type: 'circle' | 'star' | 'ribbon';
+      rotation: number;
+      rotSpeed: number;
+    }
+
+    let particles: Particle[] = [];
+    const colors = [
+      '#fbbf24', '#f59e0b', '#fde047',
+      '#ec4899', '#f43f5e', '#a855f7',
+      '#06b6d4', '#3b82f6', '#10b981',
+      '#ffffff', '#cbd5e1',
+    ];
+
+    const createBurst = (targetX: number, targetY: number, count = 48) => {
+      for (let i = 0; i < count; i++) {
+        const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.4;
+        const speed = Math.random() * 6.5 + 2.5;
+        const color = colors[Math.floor(Math.random() * colors.length)];
+        const types: ('circle' | 'star' | 'ribbon')[] = ['circle', 'star', 'ribbon'];
+        const type = types[Math.floor(Math.random() * types.length)];
+
+        particles.push({
+          x: targetX,
+          y: targetY,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          size: Math.random() * 4 + 2,
+          color,
+          alpha: 1,
+          decay: Math.random() * 0.016 + 0.01,
+          type,
+          rotation: Math.random() * Math.PI * 2,
+          rotSpeed: (Math.random() - 0.5) * 0.25,
+        });
+      }
+    };
+
+    createBurst(width * 0.25, height * 0.35, 50);
+    createBurst(width * 0.75, height * 0.35, 50);
+    const t1 = setTimeout(() => createBurst(width * 0.5, height * 0.22, 65), 250);
+    const t2 = setTimeout(() => createBurst(width * 0.15, height * 0.48, 40), 500);
+    const t3 = setTimeout(() => createBurst(width * 0.85, height * 0.48, 40), 750);
+    const t4 = setTimeout(() => createBurst(width * 0.38, height * 0.38, 45), 1100);
+    const t5 = setTimeout(() => createBurst(width * 0.62, height * 0.35, 45), 1350);
+
+    const drawStar = (cx: number, cy: number, spikes: number, outerRadius: number, innerRadius: number) => {
+      let rot = (Math.PI / 2) * 3;
+      let x = cx;
+      let y = cy;
+      const step = Math.PI / spikes;
+
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - outerRadius);
+      for (let i = 0; i < spikes; i++) {
+        x = cx + Math.cos(rot) * outerRadius;
+        y = cy + Math.sin(rot) * outerRadius;
+        ctx.lineTo(x, y);
+        rot += step;
+
+        x = cx + Math.cos(rot) * innerRadius;
+        y = cy + Math.sin(rot) * innerRadius;
+        ctx.lineTo(x, y);
+        rot += step;
+      }
+      ctx.lineTo(cx, cy - outerRadius);
+      ctx.closePath();
+      ctx.fill();
+    };
+
+    const render = () => {
+      ctx.clearRect(0, 0, width, height);
+
+      particles = particles.filter((p) => p.alpha > 0.01);
+
+      for (let i = 0; i < particles.length; i++) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.08;
+        p.vx *= 0.98;
+        p.vy *= 0.98;
+        p.alpha -= p.decay;
+        p.rotation += p.rotSpeed;
+
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, p.alpha);
+        ctx.fillStyle = p.color;
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rotation);
+
+        if (p.type === 'star') {
+          drawStar(0, 0, 5, p.size * 1.6, p.size * 0.7);
+        } else if (p.type === 'ribbon') {
+          ctx.fillRect(-p.size * 1.5, -p.size * 0.5, p.size * 3, p.size);
+        } else {
+          ctx.beginPath();
+          ctx.arc(0, 0, p.size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        ctx.restore();
+      }
+
+      if (particles.length > 0) {
+        animId = requestAnimationFrame(render);
+      }
+    };
+
+    animId = requestAnimationFrame(render);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      clearTimeout(t4);
+      clearTimeout(t5);
+      cancelAnimationFrame(animId);
+    };
+  }, [active]);
+
+  if (!active) return null;
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="pointer-events-none absolute inset-0 z-50 h-full w-full"
+    />
+  );
+};
+
+export const InteractiveDancingCat: React.FC<{
+  rank: number;
+  isUsed?: boolean;
+  className?: string;
+}> = ({ rank, isUsed = false, className = '' }) => {
+  if (!rank || rank > 3) return null;
+
+  // Cat starts sleeping by default!
+  const [isAsleep, setIsAsleep] = useState(true);
+  const [offsetX, setOffsetX] = useState(0);
+  const [facingLeft, setFacingLeft] = useState(true);
+  const [isScared, setIsScared] = useState(false);
+  const [isRunning, setIsRunning] = useState(false);
+  const [bubble, setBubble] = useState<string | null>(null);
+
+  const sleepTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // If room is used -> cat sleeps forever
+  useEffect(() => {
+    if (isUsed) {
+      setIsAsleep(true);
+      setIsRunning(false);
+      setOffsetX(0);
+    }
+  }, [isUsed]);
+
+  // When awake: active continuous running & playful 3D dancing loop
+  useEffect(() => {
+    if (isAsleep || isUsed) return;
+
+    let moveTimer: NodeJS.Timeout;
+    const patrolWaypoints = [-40, -110, -65, -135, 0, -85, -20];
+    let stepIndex = 0;
+
+    const runCycle = () => {
+      stepIndex = (stepIndex + 1) % patrolWaypoints.length;
+      const nextX = patrolWaypoints[stepIndex];
+
+      setIsRunning(true);
+      setFacingLeft(nextX < offsetX);
+      setOffsetX(nextX);
+
+      const cuteThoughts = ['✨', '🐾', '🎵', '💖', '⭐', '🎶', '😻'];
+      const pick = cuteThoughts[Math.floor(Math.random() * cuteThoughts.length)];
+      setBubble(pick);
+      setTimeout(() => setBubble(null), 1200);
+
+      setTimeout(() => {
+        setIsRunning(false);
+      }, 700);
+
+      const pauseDuration = 2200 + Math.random() * 1200;
+      moveTimer = setTimeout(runCycle, pauseDuration);
+    };
+
+    moveTimer = setTimeout(runCycle, 600);
+
+    return () => clearTimeout(moveTimer);
+  }, [isAsleep, isUsed, offsetX]);
+
+  // When user hovers / touches with mouse -> wake up or startle escape!
+  const handlePointerEnter = (e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    // If room is already used -> just sleeps peacefully
+    if (isUsed) {
+      setBubble('😴');
+      setTimeout(() => setBubble(null), 900);
+      return;
+    }
+
+    // If asleep -> WAKE UP and start running/dancing for 10 seconds!
+    if (isAsleep) {
+      setIsAsleep(false);
+      setIsScared(true);
+      setIsRunning(true);
+      setBubble('⚡');
+
+      // Wake up dash
+      const targetX = -70;
+      setFacingLeft(true);
+      setOffsetX(targetX);
+
+      setTimeout(() => {
+        setIsScared(false);
+        setIsRunning(false);
+      }, 600);
+      setTimeout(() => setBubble(null), 800);
+
+      // Start 10-second active timer -> then go back to sleep
+      if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
+      sleepTimerRef.current = setTimeout(() => {
+        setBubble('🥱');
+        setOffsetX(0);
+        setTimeout(() => {
+          setIsAsleep(true);
+          setBubble(null);
+        }, 900);
+      }, 10000);
+
+      return;
+    }
+
+    // If already awake -> evade mouse and extend awake timer by 10s!
+    const escapeSpots = [-140, -100, -50, -120, 0];
+    const farSpots = escapeSpots.filter((s) => Math.abs(s - offsetX) > 40);
+    const targetX = farSpots.length > 0
+      ? farSpots[Math.floor(Math.random() * farSpots.length)]
+      : (offsetX < -60 ? 0 : -130);
+
+    setFacingLeft(targetX < offsetX);
+    setOffsetX(targetX);
+    setIsScared(true);
+    setIsRunning(true);
+    setBubble('💨');
+
+    setTimeout(() => {
+      setIsScared(false);
+      setIsRunning(false);
+    }, 600);
+    setTimeout(() => setBubble(null), 750);
+
+    // Reset 10-second awake timer
+    if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
+    sleepTimerRef.current = setTimeout(() => {
+      setBubble('🥱');
+      setOffsetX(0);
+      setTimeout(() => {
+        setIsAsleep(true);
+        setBubble(null);
+      }, 900);
+    }, 10000);
+  };
+
+  // 3D Vibrant Theme Colors & Shading:
+  // Rank 1: 🍊 3D Bright Ginger Orange Tabby + 3D Golden Crown 👑
+  // Rank 2: 🌪️ 3D Silvery Lavender/Grey Kitty
+  // Rank 3: 🍫 3D Rich Caramel Toffee Kitty
+  const theme = {
+    1: {
+      name: 'น้องแมวส้ม 3D 👑 (แชมป์แผนกอันดับ 1 ประจำเดือน)',
+      danceClass: 'chibi-cat-3d-orange',
+      hasCrown: true,
+      id: 'orange3d',
+      furLight: '#ffedd5',
+      furMid: '#fb923c',
+      furMain: '#f97316',
+      furShadow: '#c2410c',
+      furDeep: '#7c2d12',
+      bellyLight: '#ffffff',
+      bellyWarm: '#ffedd5',
+      eyeIris: '#ea580c',
+      earPink: '#fda4af',
+      cheeks: '#fb7185',
+      stripes: '#9a3412',
+    },
+    2: {
+      name: 'น้องแมวเทา 3D 🥈 (แผนกอันดับ 2 ประจำเดือน)',
+      danceClass: 'chibi-cat-3d-grey',
+      hasCrown: false,
+      id: 'grey3d',
+      furLight: '#f1f5f9',
+      furMid: '#94a3b8',
+      furMain: '#64748b',
+      furShadow: '#475569',
+      furDeep: '#1e293b',
+      bellyLight: '#ffffff',
+      bellyWarm: '#e2e8f0',
+      eyeIris: '#0284c7',
+      earPink: '#f9a8d4',
+      cheeks: '#f472b6',
+      stripes: '#334155',
+    },
+    3: {
+      name: 'น้องแมวคาราเมล 3D 🥉 (แผนกอันดับ 3 ประจำเดือน)',
+      danceClass: 'chibi-cat-3d-caramel',
+      hasCrown: false,
+      id: 'caramel3d',
+      furLight: '#fef3c7',
+      furMid: '#d97706',
+      furMain: '#b45309',
+      furShadow: '#78350f',
+      furDeep: '#451a03',
+      bellyLight: '#ffffff',
+      bellyWarm: '#fde68a',
+      eyeIris: '#b45309',
+      earPink: '#fed7aa',
+      cheeks: '#fb923c',
+      stripes: '#5c2204',
+    },
+  }[rank as 1 | 2 | 3] || {
+    name: 'น้องแมว 3D ประจำแผนก',
+    danceClass: 'chibi-cat-3d-orange',
+    hasCrown: false,
+    id: 'orange3d',
+    furLight: '#ffedd5',
+    furMid: '#fb923c',
+    furMain: '#f97316',
+    furShadow: '#c2410c',
+    furDeep: '#7c2d12',
+    bellyLight: '#ffffff',
+    bellyWarm: '#ffedd5',
+    eyeIris: '#ea580c',
+    earPink: '#fda4af',
+    cheeks: '#fb7185',
+    stripes: '#9a3412',
+  };
+
+  return (
+    <div
+      onMouseEnter={handlePointerEnter}
+      onClick={handlePointerEnter}
+      title={
+        isUsed
+          ? `${theme.name} - ประชุมเสร็จแล้ว กำลังนอนหลับปุ๋ย 💤`
+          : isAsleep
+            ? `${theme.name} - กำลังนอนหลับอยู่ 💤 เอาเมาส์มาจี้เพื่อปลุกให้น้องตื่นมาเต้น!`
+            : `${theme.name} - กำลังตื่นเต้นวิ่งเล่น! จิ้มเพื่อแกล้งให้น้องวิ่งหนี`
+      }
+      className={`relative inline-flex items-center justify-center shrink-0 cursor-pointer select-none transition-transform duration-600 ease-out z-20 mr-1.5 ${className}`}
+      style={{
+        transform: `translateX(${offsetX}px) scaleX(${facingLeft ? -1 : 1})`,
+      }}
+    >
+      {/* Sleeping 💤 Bubble */}
+      {isAsleep && !bubble && (
+        <span className="zzz-floating-3d pointer-events-none absolute -top-5 -right-1 z-30 text-[13px] select-none font-bold text-cyan-400 drop-shadow-sm">
+          💤
+        </span>
+      )}
+
+      {/* 3D Emotion / Sparkle Bubble */}
+      {bubble && (
+        <span
+          className={`pointer-events-none absolute -top-4 ${facingLeft ? '-right-1.5' : '-left-1.5'} z-30 text-xs select-none ${
+            bubble === '💨' ? 'smoke-puff-3d' : 'bubble-pop-3d'
+          }`}
+        >
+          {bubble}
+        </span>
+      )}
+
+      {/* 3D Chibi Mascot Container */}
+      <div
+        className={`relative ${
+          isAsleep
+            ? 'chibi-sleeping-mode'
+            : isRunning
+              ? 'chibi-running-active'
+              : theme.danceClass
+        }`}
+      >
+        {/* 3D Crown for Rank 1 */}
+        {theme.hasCrown && (
+          <div className="chibi-crown-3d pointer-events-none absolute -top-4 left-1/2 -translate-x-1/2 text-sm z-30 filter drop-shadow-md">
+            👑
+          </div>
+        )}
+
+        {/* High-Definition 3D Vector SVG: Sleeping Loaf Pose vs Awake Standing Pose */}
+        {isAsleep ? (
+          /* 🐱 3D Curled Sleeping Loaf Pose (ท่านอนหมอบหลับปุ๋ย) */
+          <svg
+            width="36"
+            height="26"
+            viewBox="0 0 58 40"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            className="filter drop-shadow-md overflow-visible"
+          >
+            <defs>
+              <radialGradient id={`sleepHead-${theme.id}`} cx="35%" cy="30%" r="68%">
+                <stop offset="0%" stopColor={theme.furLight} />
+                <stop offset="25%" stopColor={theme.furMid} />
+                <stop offset="70%" stopColor={theme.furMain} />
+                <stop offset="100%" stopColor={theme.furShadow} />
+              </radialGradient>
+              <radialGradient id={`sleepBody-${theme.id}`} cx="40%" cy="30%" r="75%">
+                <stop offset="0%" stopColor={theme.furLight} />
+                <stop offset="35%" stopColor={theme.furMid} />
+                <stop offset="75%" stopColor={theme.furMain} />
+                <stop offset="100%" stopColor={theme.furDeep} />
+              </radialGradient>
+              <radialGradient id={`sleepBelly-${theme.id}`} cx="45%" cy="35%" r="65%">
+                <stop offset="0%" stopColor={theme.bellyLight} />
+                <stop offset="60%" stopColor={theme.bellyWarm} />
+                <stop offset="100%" stopColor={theme.furMid} />
+              </radialGradient>
+              <radialGradient id={`sleepCheek-${theme.id}`} cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stopColor={theme.cheeks} stopOpacity="0.85" />
+                <stop offset="100%" stopColor={theme.cheeks} stopOpacity="0" />
+              </radialGradient>
+            </defs>
+
+            {/* Curled Tucked Tail */}
+            <path
+              d="M8 26C4 22 5 15 10 13C13 12 15 14 14 17C13 21 16 26 21 28"
+              stroke={theme.furShadow}
+              strokeWidth="4"
+              strokeLinecap="round"
+            />
+
+            {/* 3D Curled Sleeping Loaf Body */}
+            <ellipse cx="26" cy="24" rx="20" ry="12.5" fill={`url(#sleepBody-${theme.id})`} />
+
+            {/* Tabby Stripes on Back */}
+            <path d="M19 14L21 18" stroke={theme.stripes} strokeWidth="1.8" strokeLinecap="round" opacity="0.85" />
+            <path d="M25 13L26 18" stroke={theme.stripes} strokeWidth="2" strokeLinecap="round" opacity="0.85" />
+            <path d="M31 14L30 18" stroke={theme.stripes} strokeWidth="1.8" strokeLinecap="round" opacity="0.85" />
+
+            {/* Sleeping Head Resting Forward */}
+            <circle cx="41" cy="20" r="12" fill={`url(#sleepHead-${theme.id})`} />
+
+            {/* Sleeping Ears Tilted Softly */}
+            <path d="M33 13L37 4L42 11Z" fill={`url(#sleepHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.8" />
+            <path d="M35 12L38 6.5L41 10.5Z" fill={theme.earPink} />
+
+            <path d="M46 11L51 4L54 13Z" fill={`url(#sleepHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.8" />
+            <path d="M47.5 10.5L50.5 6.5L52.5 12Z" fill={theme.earPink} />
+
+            {/* Head 3D Specular Highlight */}
+            <ellipse cx="38" cy="14" rx="4.5" ry="2" fill="#ffffff" opacity="0.4" transform="rotate(-15 38 14)" />
+
+            {/* Sleeping Muzzle */}
+            <ellipse cx="40" cy="24" rx="4" ry="2.6" fill={`url(#sleepBelly-${theme.id})`} />
+            <ellipse cx="46" cy="24" rx="4" ry="2.6" fill={`url(#sleepBelly-${theme.id})`} />
+
+            {/* Soft Blushing Cheeks 🌸 */}
+            <circle cx="34" cy="23" r="3.5" fill={`url(#sleepCheek-${theme.id})`} />
+            <circle cx="50" cy="23" r="3.5" fill={`url(#sleepCheek-${theme.id})`} />
+
+            {/* Peaceful Sleeping Eyes (u_u curved lashes) */}
+            <path d="M34 18.5C35.5 21 38 21 39.5 18.5" stroke="#0f172a" strokeWidth="1.8" strokeLinecap="round" />
+            <path d="M45 18.5C46.5 21 49 21 50.5 18.5" stroke="#0f172a" strokeWidth="1.8" strokeLinecap="round" />
+
+            {/* Pink Nose & Cute Sleeping Mouth */}
+            <path d="M42.5 22L44.5 22L43.5 23.2Z" fill="#f43f5e" />
+            <path
+              d="M41 24.2C42 25.2 43.5 24.5 43.5 23.5C43.5 24.5 45 25.2 46 24.2"
+              stroke="#0f172a"
+              strokeWidth="1.2"
+              strokeLinecap="round"
+            />
+
+            {/* Whiskers */}
+            <line x1="28" y1="21.5" x2="35" y2="23" stroke={theme.furShadow} strokeWidth="1" strokeLinecap="round" opacity="0.8" />
+            <line x1="28" y1="25" x2="35" y2="24.5" stroke={theme.furShadow} strokeWidth="1" strokeLinecap="round" opacity="0.8" />
+            <line x1="49" y1="23" x2="56" y2="21.5" stroke={theme.furShadow} strokeWidth="1" strokeLinecap="round" opacity="0.8" />
+            <line x1="49" y1="24.5" x2="56" y2="25" stroke={theme.furShadow} strokeWidth="1" strokeLinecap="round" opacity="0.8" />
+
+            {/* Tucked Sleeping Front Paws under chin */}
+            <ellipse cx="38" cy="31" rx="4" ry="2.6" fill={`url(#sleepBelly-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.8" />
+            <circle cx="38" cy="31" r="1" fill={theme.earPink} />
+
+            <ellipse cx="47" cy="31" rx="4" ry="2.6" fill={`url(#sleepBelly-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.8" />
+            <circle cx="47" cy="31" r="1" fill={theme.earPink} />
+          </svg>
+        ) : (
+          /* 🐱 3D Standing Joyful Dancing & Running Pose (ท่ายืนเต้นวิ่งเล่น) */
+          <svg
+            width="32"
+            height="34"
+            viewBox="0 0 52 56"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            className="filter drop-shadow-md overflow-visible"
+          >
+            <defs>
+              <radialGradient id={`chibiHead-${theme.id}`} cx="35%" cy="30%" r="68%">
+                <stop offset="0%" stopColor={theme.furLight} />
+                <stop offset="25%" stopColor={theme.furMid} />
+                <stop offset="70%" stopColor={theme.furMain} />
+                <stop offset="100%" stopColor={theme.furShadow} />
+              </radialGradient>
+              <radialGradient id={`chibiBody-${theme.id}`} cx="38%" cy="28%" r="72%">
+                <stop offset="0%" stopColor={theme.furLight} />
+                <stop offset="35%" stopColor={theme.furMid} />
+                <stop offset="75%" stopColor={theme.furMain} />
+                <stop offset="100%" stopColor={theme.furDeep} />
+              </radialGradient>
+              <radialGradient id={`chibiBelly-${theme.id}`} cx="45%" cy="35%" r="65%">
+                <stop offset="0%" stopColor={theme.bellyLight} />
+                <stop offset="60%" stopColor={theme.bellyWarm} />
+                <stop offset="100%" stopColor={theme.furMid} />
+              </radialGradient>
+              <radialGradient id={`chibiCheek-${theme.id}`} cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stopColor={theme.cheeks} stopOpacity="0.85" />
+                <stop offset="100%" stopColor={theme.cheeks} stopOpacity="0" />
+              </radialGradient>
+            </defs>
+
+            {/* 3D Bouncy Animated Tail */}
+            <path
+              d="M10 42C4 36 2 24 7 17C9 14 12 16 11 20C9.5 24 10 32 15 37"
+              stroke={theme.furShadow}
+              strokeWidth="4.5"
+              strokeLinecap="round"
+              className="chibi-tail-3d"
+            />
+
+            {/* Left 3D Ear */}
+            <path d="M14 18L19 7L27 16Z" fill={`url(#chibiHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="1" />
+            <path d="M16 16.5L19.5 10L24.5 15Z" fill={theme.earPink} />
+
+            {/* Right 3D Ear */}
+            <path d="M35 16L43 7L48 18Z" fill={`url(#chibiHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="1" />
+            <path d="M37.5 15L42.5 10L46 16.5Z" fill={theme.earPink} />
+
+            {/* 3D Volumetric Body */}
+            <ellipse cx="31" cy="38" rx="16" ry="13.5" fill={`url(#chibiBody-${theme.id})`} />
+
+            {/* 3D Chubby White Belly */}
+            <ellipse cx="31" cy="39" rx="10" ry="8.5" fill={`url(#chibiBelly-${theme.id})`} />
+
+            {/* Tabby Forehead & Back Stripes */}
+            <path d="M31 8L31 12" stroke={theme.stripes} strokeWidth="2.2" strokeLinecap="round" opacity="0.9" />
+            <path d="M26 9.5L28 13" stroke={theme.stripes} strokeWidth="1.8" strokeLinecap="round" opacity="0.85" />
+            <path d="M36 9.5L34 13" stroke={theme.stripes} strokeWidth="1.8" strokeLinecap="round" opacity="0.85" />
+
+            {/* 3D Volumetric Round Head */}
+            <circle cx="31" cy="20" r="13.5" fill={`url(#chibiHead-${theme.id})`} />
+
+            {/* Forehead 3D Specular Highlight */}
+            <ellipse cx="27" cy="13" rx="5.5" ry="2.6" fill="#ffffff" opacity="0.45" transform="rotate(-15 27 13)" />
+
+            {/* 3D Soft Muzzle */}
+            <ellipse cx="27" cy="24" rx="4.5" ry="3.2" fill={`url(#chibiBelly-${theme.id})`} />
+            <ellipse cx="35" cy="24" rx="4.5" ry="3.2" fill={`url(#chibiBelly-${theme.id})`} />
+
+            {/* Blushing Pink Cheeks 🌸 */}
+            <circle cx="21" cy="23.5" r="4" fill={`url(#chibiCheek-${theme.id})`} />
+            <circle cx="41" cy="23.5" r="4" fill={`url(#chibiCheek-${theme.id})`} />
+
+            {/* Sparkling Kawaii 3D Anime Eyes */}
+            {isScared ? (
+              <>
+                {/* Big Surprised Eyes */}
+                <circle cx="24" cy="18" r="4" fill="#ffffff" stroke="#0f172a" strokeWidth="1.2" />
+                <circle cx="24" cy="18" r="1.8" fill="#0f172a" />
+                <circle cx="23" cy="16.8" r="0.8" fill="#ffffff" />
+
+                <circle cx="38" cy="18" r="4" fill="#ffffff" stroke="#0f172a" strokeWidth="1.2" />
+                <circle cx="38" cy="18" r="1.8" fill="#0f172a" />
+                <circle cx="37" cy="16.8" r="0.8" fill="#ffffff" />
+              </>
+            ) : (
+              <>
+                {/* Huge Sparkly Anime Eyes with Color Iris & Catchlights */}
+                <ellipse cx="24" cy="18" rx="3.5" ry="4.2" fill="#0f172a" />
+                <ellipse cx="38" cy="18" rx="3.5" ry="4.2" fill="#0f172a" />
+
+                <ellipse cx="24" cy="19.5" rx="2.6" ry="2" fill={theme.eyeIris} opacity="0.9" />
+                <ellipse cx="38" cy="19.5" rx="2.6" ry="2" fill={theme.eyeIris} opacity="0.9" />
+
+                <circle cx="22.8" cy="16.2" r="1.5" fill="#ffffff" />
+                <circle cx="36.8" cy="16.2" r="1.5" fill="#ffffff" />
+
+                <circle cx="25.5" cy="19.5" r="0.8" fill="#ffffff" />
+                <circle cx="39.5" cy="19.5" r="0.8" fill="#ffffff" />
+              </>
+            )}
+
+            {/* 3D Cute Pink Nose & W-Mouth */}
+            <path d="M30 22.2L32 22.2L31 23.5Z" fill="#f43f5e" />
+            <path
+              d="M28 24.5C29.5 25.8 31 24.8 31 23.8C31 24.8 32.5 25.8 34 24.5"
+              stroke="#0f172a"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+            />
+
+            {/* Cute Whiskers */}
+            <line x1="14" y1="21.5" x2="22" y2="23" stroke={theme.furShadow} strokeWidth="1.2" strokeLinecap="round" opacity="0.8" />
+            <line x1="14" y1="25.5" x2="22" y2="25" stroke={theme.furShadow} strokeWidth="1.2" strokeLinecap="round" opacity="0.8" />
+            <line x1="40" y1="23" x2="48" y2="21.5" stroke={theme.furShadow} strokeWidth="1.2" strokeLinecap="round" opacity="0.8" />
+            <line x1="40" y1="25" x2="48" y2="25.5" stroke={theme.furShadow} strokeWidth="1.2" strokeLinecap="round" opacity="0.8" />
+
+            {/* 3D Joyful Squishy Paws with Pink Jelly Beans */}
+            <g className="chibi-paws-3d">
+              {/* Left Paw */}
+              <ellipse cx="21" cy="33" rx="3.8" ry="3" fill={`url(#chibiBelly-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.9" />
+              <circle cx="21" cy="33" r="1.3" fill={theme.earPink} />
+
+              {/* Right Paw */}
+              <ellipse cx="41" cy="33" rx="3.8" ry="3" fill={`url(#chibiBelly-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.9" />
+              <circle cx="41" cy="33" r="1.3" fill={theme.earPink} />
+            </g>
+
+            {/* 3D Chubby Feet */}
+            <ellipse cx="23" cy="49" rx="4.8" ry="3.2" fill={`url(#chibiHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.9" />
+            <ellipse cx="39" cy="49" rx="4.8" ry="3.2" fill={`url(#chibiHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.9" />
+          </svg>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export const TopRankHonorMascot = InteractiveDancingCat;
+
+export const LeaderboardBookingBadge: React.FC<{
+  rank: number;
+  language: 'th' | 'en';
+  compact?: boolean;
+}> = () => {
+  return null;
+};
 
 export default LeaderboardPanel;

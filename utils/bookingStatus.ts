@@ -4,16 +4,39 @@ export type BookingDisplayState = 'noCheckIn' | 'pending' | 'waitForVerify' | 'v
 
 const CHECK_IN_WINDOW_AFTER_MS = 15 * 60 * 1000;
 
-const timestamp = (value: Date | string | number | undefined, fallback: number): number => {
+const timestamp = (value: unknown, fallback: number): number => {
   if (!value) return fallback;
-  const date = value instanceof Date ? value : new Date(value);
-  const time = date.getTime();
-  return Number.isNaN(time) ? fallback : time;
+  if (value instanceof Date) {
+    const t = value.getTime();
+    return Number.isNaN(t) ? fallback : t;
+  }
+  if (typeof (value as any).toDate === 'function') {
+    try {
+      const d = (value as any).toDate();
+      if (d instanceof Date) {
+        const t = d.getTime();
+        return Number.isNaN(t) ? fallback : t;
+      }
+    } catch {
+      // ignore
+    }
+  }
+  if (typeof (value as any).seconds === 'number') {
+    return (value as any).seconds * 1000;
+  }
+  if (typeof value === 'number') {
+    return Number.isNaN(value) ? fallback : value;
+  }
+  if (typeof value === 'string') {
+    const parsed = new Date(value).getTime();
+    return Number.isNaN(parsed) ? fallback : parsed;
+  }
+  return fallback;
 };
 
 export const getBookingDisplayState = (booking: Booking, now: Date = new Date()): BookingDisplayState => {
+  if (!booking) return 'confirmed';
   if (booking.status === BookingStatus.REJECTED) return 'rejected';
-  if (booking.status === BookingStatus.NO_SHOW || (booking.status as string) === 'MISSED_CHECK_IN') return 'noCheckIn';
   if (booking.status === BookingStatus.PENDING) return 'pending';
 
   const nowTime = now.getTime();
@@ -21,31 +44,12 @@ export const getBookingDisplayState = (booking: Booking, now: Date = new Date())
   const endTime = timestamp(booking.endTime, startTime);
 
   if (nowTime > endTime) return 'used';
-
-  const hasVerifiedOrStarted = booking.status === BookingStatus.VERIFIED || !!booking.actualStartTime;
-  if (hasVerifiedOrStarted) {
-    if (nowTime >= startTime && nowTime <= endTime) return 'roomInUse';
-    if (booking.actualEndTime) return 'used';
-    return 'verified';
-  }
-
-  if (booking.status === BookingStatus.CONFIRMED) {
-    const createdAtTime = timestamp(booking.createdAt, startTime);
-    const baseCutoff = startTime + CHECK_IN_WINDOW_AFTER_MS;
-    const graceCutoff = createdAtTime + CHECK_IN_WINDOW_AFTER_MS;
-    const verifyCutoffTime = Math.max(baseCutoff, graceCutoff);
-    const verifyStartTime = startTime - 15 * 60 * 1000;
-    if (nowTime >= verifyStartTime && nowTime <= verifyCutoffTime) return 'waitForVerify';
-    if (nowTime > verifyCutoffTime) return 'noCheckIn';
-    return 'confirmed';
-  }
+  if (nowTime >= startTime && nowTime <= endTime) return 'roomInUse';
 
   return 'confirmed';
 };
 
-export const isBookingNoCheckIn = (booking: Booking, now: Date = new Date()) => (
-  getBookingDisplayState(booking, now) === 'noCheckIn'
-);
+export const isBookingNoCheckIn = (_booking: Booking, _now: Date = new Date()) => false;
 
 export const isBookingRoomInUse = (booking: Booking, now: Date = new Date()) => (
   getBookingDisplayState(booking, now) === 'roomInUse'

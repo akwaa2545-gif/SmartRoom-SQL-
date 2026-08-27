@@ -17,7 +17,7 @@ export const copyAdminGuide = {
       ['Approving / Rejecting', 'Review pending bookings under the "Pending Bookings" section or on the room timeline. Click "Approve" to officially confirm, or "Reject" to decline (you can provide a reason).'],
       ['Editing / Deleting Bookings', 'Click "Edit" on a booking in the history list to change the room, title, contact, or time slots. Click the trash icon to delete/release the booking immediately.'],
       ['Filtering & Exporting', 'Filter the booking history by Year, Month, or Specific Date. The summary bar shows active filters. Click "Export CSV" to download the filtered results.'],
-      ['Email Logs & Status Tracker', 'Go to the Email Sent History tab to search and inspect when booking emails were queued or dispatched, verify their current delivery status, and inspect recipient addresses.'],
+      ['Email Logs & Status Tracker', 'Go to the Email Sent History tab to search and inspect when booking reminder emails were queued or dispatched, verify their current delivery status, and inspect recipient addresses.'],
     ],
     users: [
       ['Super Admin vs Approver', 'Super Admin accounts can manage other admin users, add/delete rooms, and edit all settings. Approvers are read-only for rooms/users but can approve/reject bookings.'],
@@ -39,7 +39,7 @@ export const copyAdminGuide = {
       ['การอนุมัติ / ปฏิเสธ', 'ตรวจสอบคำขอที่แท็บคำขอจอง หรือบนปฏิทิน คลิก "อนุมัติ" เพื่อยืนยันการใช้งานจริง หรือคลิก "ปฏิเสธ" เพื่อส่งอีเมลยกเลิกรายการจอง'],
       ['การแก้ไข / ลบรายการจอง', 'คลิก "แก้ไข" รายการจองใดๆ เพื่อเปลี่ยนห้อง ชื่อเรื่อง ผู้ติดต่อ หรือเวลาได้ทันที หรือคลิกไอคอนถังขยะเพื่อยกเลิกและปล่อยห้องว่างทันที'],
       ['การกรองประวัติและการส่งออก', 'กรองรายการจองย้อนหลังแยกตาม ปี, เดือน หรือระบุวันเจาะจง แล้วคลิก "ส่งออก CSV" เพื่อดึงรายงานเฉพาะรายการที่แสดงอยู่บนหน้าจอ'],
-      ['ประวัติอีเมลยืนยันตัวตน', 'ไปที่แท็บ "ประวัติการส่งอีเมล" เพื่อค้นหาหรือตรวจสอบช่วงเวลาที่ระบบคิวส่งอีเมลออกจริง เพื่อติดตามว่าระบบส่งลิงก์ยืนยันตัวตนสำเร็จหรือไม่'],
+      ['ประวัติอีเมลแจ้งเตือนการประชุม', 'ไปที่แท็บ "ประวัติการส่งอีเมล" เพื่อค้นหาหรือตรวจสอบช่วงเวลาที่ระบบส่งอีเมลแจ้งเตือนการประชุมล่วงหน้า 15 นาที เพื่อติดตามสถานะการส่งออกจริง'],
     ],
     users: [
       ['สิทธิ์ Super Admin และ Approver', 'Super Admin สามารถจัดการบัญชีผู้ดูแลระบบท่านอื่น เพิ่ม/ลบห้อง และตั้งค่าทุกอย่างได้ ส่วน Approver สามารถเข้ามาเพื่อตรวจและกดอนุมัติ/ปฏิเสธรายการจองเท่านั้น'],
