@@ -250,10 +250,13 @@ const Dashboard: React.FC<DashboardProps> = ({
     if (booking.email && organizerLeaderboardRankMap.has(booking.email.trim().toLowerCase())) {
       return organizerLeaderboardRankMap.get(booking.email.trim().toLowerCase());
     }
+    if (booking.emailDisplayName && organizerLeaderboardRankMap.has(booking.emailDisplayName.trim().toLowerCase())) {
+      return organizerLeaderboardRankMap.get(booking.emailDisplayName.trim().toLowerCase());
+    }
     if (booking.employeeId && organizerLeaderboardRankMap.has(booking.employeeId.trim().toLowerCase())) {
       return organizerLeaderboardRankMap.get(booking.employeeId.trim().toLowerCase());
     }
-    const organizerKey = (booking.organizer || booking.emailDisplayName || '').trim().toLowerCase();
+    const organizerKey = (booking.emailDisplayName || booking.organizer || '').trim().toLowerCase();
     if (organizerKey && organizerLeaderboardRankMap.has(organizerKey)) {
       return organizerLeaderboardRankMap.get(organizerKey);
     }

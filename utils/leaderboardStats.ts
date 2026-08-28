@@ -171,14 +171,12 @@ export const calculateLeaderboardStats = (
         return;
       }
 
-      const name = (
-        b.organizer ||
-        b.emailDisplayName ||
-        email ||
-        "Guest"
-      ).trim();
-      // Primary group key is email to prevent name collisions; fallback to name if email is absent
-      const key = email || name.toLowerCase();
+      const emailDisplayName = (b.emailDisplayName || "").trim();
+      const organizer = (b.organizer || "").trim();
+      const name = emailDisplayName || organizer || email || "Guest";
+
+      // Primary group key prioritizes email, then emailDisplayName to unify bookings, fallback to organizer
+      const key = email || (emailDisplayName ? emailDisplayName.toLowerCase() : organizer.toLowerCase()) || "guest";
       const dept = b.department || b.emailDepartment || "Other";
       const bStart =
         b.startTime instanceof Date ? b.startTime : new Date(b.startTime);
@@ -198,14 +196,17 @@ export const calculateLeaderboardStats = (
         verifiedBookings: 0,
       };
 
-      // Keep the most informative display name and department
-      if (
+      // Always prioritize authoritative EmailDisplayName over typed Organizer name
+      if (emailDisplayName && emailDisplayName !== "Guest") {
+        existing.name = emailDisplayName;
+      } else if (
         name &&
         name !== "Guest" &&
-        (existing.name === "Guest" || existing.name === email)
+        (!existing.name || existing.name === "Guest" || existing.name === email)
       ) {
         existing.name = name;
       }
+
       if (b.employeeId && !existing.employeeId) {
         existing.employeeId = b.employeeId;
       }
