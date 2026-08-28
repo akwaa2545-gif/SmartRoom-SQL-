@@ -638,44 +638,139 @@ function buildVerificationMessage(bookingId, booking, verifyUrl) {
     new URL("/email-logo-white.png", config.appBaseUrl).toString(),
   );
   return `<!doctype html>
-<html><body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;color:#172033;">
-  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Your room is ready. Verify your TOKIN Smart Room booking now.</div>
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f3f4f6;padding:28px 12px;">
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Room Booking Check-in</title>
+</head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0f172a;-webkit-font-smoothing:antialiased;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">ห้องประชุมของคุณพร้อมใช้งานแล้ว • กรุณากดเช็คอินเพื่อยืนยันการเข้าใช้งานห้องประชุม</div>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f1f5f9;padding:32px 12px;">
     <tr><td align="center">
-      <table role="presentation" width="620" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:620px;background:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 10px 28px rgba(15,23,42,.12);">
-        <tr><td style="padding:22px 30px;background:#d84f25;color:#ffffff;">
+      <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;background:#ffffff;border-radius:24px;overflow:hidden;box-shadow:0 20px 40px rgba(15,23,42,.12);border:1px solid #e2e8f0;">
+        
+        <!-- Header Banner with Gradient -->
+        <tr><td style="padding:28px 32px;background:linear-gradient(135deg, #d84f25 0%, #ea580c 50%, #c2410c 100%);color:#ffffff;">
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr>
-            <td style="font-size:19px;font-weight:800;letter-spacing:.2px;"><img src="${logoUrl}" width="32" height="32" alt="TOKIN Smart Room" style="display:inline-block;vertical-align:middle;margin-right:10px;border:0;outline:none;text-decoration:none;">TOKIN <span style="font-weight:400;">Smart Room</span></td>
-            <td align="right" style="font-size:12px;line-height:18px;color:#fff2eb;">BOOKING TICKET<br><span style="font-size:13px;font-weight:700;color:#ffffff;">#${escapeHtml(bookingId)}</span></td>
+            <td>
+              <div style="font-size:20px;font-weight:900;letter-spacing:.3px;color:#ffffff;">
+                <img src="${logoUrl}" width="34" height="34" alt="TOKIN Logo" style="display:inline-block;vertical-align:middle;margin-right:10px;border:0;outline:none;border-radius:8px;">
+                <span style="vertical-align:middle;">TOKIN <span style="font-weight:400;opacity:0.95;">Smart Room</span></span>
+              </div>
+            </td>
+            <td align="right" style="vertical-align:middle;">
+              <span style="display:inline-block;padding:6px 14px;background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.35);border-radius:100px;font-size:12px;font-weight:800;color:#ffffff;letter-spacing:0.5px;">
+                #${escapeHtml(bookingId)}
+              </span>
+            </td>
           </tr></table>
         </td></tr>
-        <tr><td style="padding:30px 30px 20px;">
-          <div style="font-size:25px;line-height:32px;font-weight:800;color:#172033;">Your booking is ready</div>
-          <p style="margin:10px 0 0;font-size:15px;line-height:23px;color:#526074;">Please verify your room booking during its check-in window. This helps us keep rooms available for everyone.</p>
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top:24px;background:#fff7f3;border:1px solid #fed6c8;border-radius:14px;">
-            <tr><td style="padding:19px 20px;border-bottom:1px dashed #e5a38d;">
-              <div style="font-size:11px;font-weight:700;letter-spacing:.8px;color:#b54220;text-transform:uppercase;">Meeting</div>
-              <div style="margin-top:5px;font-size:20px;line-height:27px;font-weight:800;color:#172033;">${title}</div>
-              <div style="margin-top:6px;font-size:14px;line-height:20px;color:#5d6878;">${roomName}</div>
+
+        <!-- Main Content Body -->
+        <tr><td style="padding:36px 32px 24px;">
+          
+          <!-- Title & Subtitle (Thai & English) -->
+          <div style="font-size:23px;line-height:32px;font-weight:900;color:#0f172a;letter-spacing:-0.3px;">
+            ห้องประชุมพร้อมใช้งาน &bull; Check-in Now
+          </div>
+          <p style="margin:10px 0 0;font-size:14.5px;line-height:23px;color:#475569;">
+            กรุณากดปุ่ม <strong>&ldquo;เช็คอินเข้าห้องประชุม&rdquo;</strong> เพื่อยืนยันการเข้าใช้งานตามเวลาที่จองไว้
+            <br>
+            <span style="font-size:13px;color:#64748b;">Please check in to confirm your meeting room usage.</span>
+          </p>
+
+          <!-- Ticket Card Layout -->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top:26px;background:#fffaf8;border:1.5px solid #ffedd5;border-radius:18px;overflow:hidden;box-shadow:0 4px 16px rgba(234,88,12,0.06);">
+            <!-- Meeting Info Top -->
+            <tr><td style="padding:22px 24px;background:linear-gradient(180deg, #fff1eb 0%, #fffaf8 100%);border-bottom:1.5px dashed #fed7aa;">
+              <div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#c2410c;text-transform:uppercase;">หัวข้อการประชุม / Meeting Title</div>
+              <div style="margin-top:6px;font-size:21px;line-height:28px;font-weight:900;color:#0f172a;">${title}</div>
+              <div style="margin-top:8px;">
+                <span style="display:inline-block;padding:4px 12px;background:#ffedd5;border:1px solid #fed7aa;border-radius:8px;font-size:12.5px;font-weight:800;color:#9a3412;">
+                  🏢 ${roomName}
+                </span>
+              </div>
             </td></tr>
-            <tr><td style="padding:18px 20px;">
+
+            <!-- Date & Time Grid -->
+            <tr><td style="padding:20px 24px;">
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr>
-                <td width="50%" style="padding-right:10px;border-right:1px solid #f0c7b8;vertical-align:top;"><div style="font-size:11px;font-weight:700;letter-spacing:.7px;color:#9a3412;text-transform:uppercase;">Date</div><div style="margin-top:5px;font-size:15px;font-weight:700;color:#172033;">${escapeHtml(bookingDate)}</div></td>
-                <td width="50%" style="padding-left:17px;vertical-align:top;"><div style="font-size:11px;font-weight:700;letter-spacing:.7px;color:#9a3412;text-transform:uppercase;">Time</div><div style="margin-top:5px;font-size:15px;font-weight:700;color:#172033;">${escapeHtml(timeRange)}</div></td>
+                <td width="50%" style="padding-right:12px;border-right:1.5px solid #ffedd5;vertical-align:top;">
+                  <div style="font-size:11px;font-weight:800;letter-spacing:0.8px;color:#9a3412;text-transform:uppercase;">📅 วันที่ / Date</div>
+                  <div style="margin-top:6px;font-size:15px;font-weight:800;color:#0f172a;">${escapeHtml(bookingDate)}</div>
+                </td>
+                <td width="50%" style="padding-left:18px;vertical-align:top;">
+                  <div style="font-size:11px;font-weight:800;letter-spacing:0.8px;color:#9a3412;text-transform:uppercase;">⏰ เวลา / Time</div>
+                  <div style="margin-top:6px;font-size:15px;font-weight:800;color:#ea580c;">${escapeHtml(timeRange)}</div>
+                </td>
               </tr></table>
             </td></tr>
           </table>
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top:20px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;"><tr><td style="padding:15px 17px;font-size:13px;line-height:20px;color:#526074;"><span style="font-weight:700;color:#172033;">Booked by:</span> ${organizer}<br><span style="font-weight:700;color:#172033;">Booking ID:</span> ${escapeHtml(bookingId)}</td></tr></table>
-          <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:26px 0 18px;"><tr><td style="border-radius:9px;background:#e85d31;">
-            <a href="${safeVerifyUrl}" style="display:inline-block;padding:15px 25px;font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:9px;">Verify booking</a>
-          </td></tr></table>
-          <p style="margin:0;font-size:13px;line-height:20px;color:#64748b;">If the button does not open, use this link:<br><a href="${safeVerifyUrl}" style="color:#c2410c;word-break:break-all;">${safeVerifyUrl}</a></p>
+
+          <!-- Booked By & Details Card -->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top:16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;">
+            <tr><td style="padding:14px 18px;font-size:13px;line-height:22px;color:#475569;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td style="color:#64748b;font-weight:600;width:110px;">ผู้จอง / Booker:</td>
+                  <td style="color:#0f172a;font-weight:800;">${organizer}</td>
+                </tr>
+                <tr>
+                  <td style="color:#64748b;font-weight:600;">รหัสการจอง / ID:</td>
+                  <td style="color:#475569;font-family:monospace;font-weight:700;">#${escapeHtml(bookingId)}</td>
+                </tr>
+              </table>
+            </td></tr>
+          </table>
+
+          <!-- Primary High-Impact CTA Button -->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:28px 0 20px;">
+            <tr><td align="center">
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                <tr><td style="border-radius:14px;background:linear-gradient(135deg, #f97316 0%, #ea580c 50%, #c2410c 100%);box-shadow:0 8px 24px rgba(234,88,12,0.35);">
+                  <a href="${safeVerifyUrl}" target="_blank" style="display:inline-block;padding:16px 36px;font-size:16px;font-weight:800;color:#ffffff;text-decoration:none;border-radius:14px;letter-spacing:0.3px;">
+                    ⚡ เช็คอินเข้าห้องประชุม (Check-in)
+                  </a>
+                </td></tr>
+              </table>
+            </td></tr>
+          </table>
+
+          <!-- Helpful Advance Tip Box -->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom:20px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;">
+            <tr><td style="padding:12px 16px;font-size:12.5px;line-height:18px;color:#1e40af;">
+              <strong>💡 ข้อแนะนำ:</strong> สามารถกดเช็คอินล่วงหน้าได้ <strong>15 นาที</strong> ก่อนเริ่มการประชุม จนถึงเวลาสิ้นสุดการประชุม
+            </td></tr>
+          </table>
+
+          <!-- Fallback Direct Link -->
+          <p style="margin:0;padding-top:12px;border-top:1px solid #f1f5f9;font-size:12px;line-height:18px;color:#94a3b8;word-break:break-all;">
+            หากกดปุ่มไม่ได้ ให้คลิกลิงก์นี้โดยตรง:
+            <br>
+            <a href="${safeVerifyUrl}" style="color:#ea580c;text-decoration:underline;word-break:break-all;">${safeVerifyUrl}</a>
+          </p>
+
         </td></tr>
-        <tr><td style="padding:17px 30px;background:#172033;font-size:12px;line-height:18px;color:#d7dde8;">TOKIN Smart Room &middot; Automated booking notification<br><span style="color:#9eaabc;">Please do not reply to this email.</span></td></tr>
+
+        <!-- Footer -->
+        <tr><td style="padding:22px 32px;background:#0f172a;font-size:12px;line-height:18px;color:#cbd5e1;border-top:1px solid #1e293b;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr>
+            <td>
+              <div style="font-weight:800;color:#ffffff;">TOKIN Smart Room System</div>
+              <div style="color:#94a3b8;font-size:11.5px;margin-top:2px;">Automated meeting room notification &bull; Please do not reply</div>
+            </td>
+            <td align="right" style="vertical-align:middle;color:#64748b;font-size:11px;">
+              &copy; TOKIN Corporation
+            </td>
+          </tr></table>
+        </td></tr>
+
       </table>
     </td></tr>
   </table>
-</body></html>`;
+</body>
+</html>`;
 }
 
 async function recordAudit({
@@ -934,7 +1029,7 @@ async function createSqlBooking(input, requesterUid) {
 
 async function deliverBookingEmail(bookingId, booking) {
   const email = assertYageoEmail(booking.email, config.yageoDomain);
-  const subject = `[TOKIN Smart Room] Verify booking ${bookingId}`;
+  const subject = `[TOKIN Smart Room] ห้องประชุมพร้อมใช้งาน (Check-in) - ${booking.title || booking.roomName || bookingId}`;
   const verifyUrl = booking.verifyUrl;
   if (!verifyUrl)
     throw new ApiError(
@@ -1027,7 +1122,7 @@ async function deliverBookingEmail(bookingId, booking) {
 
 async function deliverSqlBookingEmail(bookingId, booking) {
   const email = assertYageoEmail(booking.email, config.yageoDomain);
-  const subject = `[TOKIN Smart Room] Verify booking ${bookingId}`;
+  const subject = `[TOKIN Smart Room] ห้องประชุมพร้อมใช้งาน (Check-in) - ${booking.title || booking.roomName || bookingId}`;
   const token = createToken();
   const verifyUrl = new URL("/verify", config.appBaseUrl);
   verifyUrl.searchParams.set("bookingId", bookingId);
