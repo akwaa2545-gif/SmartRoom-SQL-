@@ -244,6 +244,24 @@
         100% { opacity: 1; transform: scale(1) translateY(0); }
       }
 
+      @keyframes penguinWaddle3D {
+        0%, 100% { transform: perspective(200px) rotate(-14deg) translateY(0) scale(1); }
+        50% { transform: perspective(200px) rotate(14deg) translateY(-4px) scale(1.05); }
+      }
+      @keyframes penguinFlippersJoy {
+        0%, 100% { transform: rotate(-25deg); }
+        50% { transform: rotate(35deg); }
+      }
+      @keyframes bunnyBouncyHop {
+        0%, 100% { transform: translateY(0) scale(1, 0.95); }
+        40% { transform: translateY(-7px) scale(0.96, 1.08); }
+        70% { transform: translateY(-1px) scale(1.04, 0.96); }
+      }
+      @keyframes earTwitch3D {
+        0%, 90%, 100% { transform: rotate(0deg); }
+        93% { transform: rotate(-15deg); }
+        96% { transform: rotate(15deg); }
+      }
       @keyframes catSleepingBreathe {
         0%, 100% { transform: translateY(2px) scale(1, 0.94) rotate(2deg); }
         50% { transform: translateY(0px) scale(1.02, 1.02) rotate(0deg); }
@@ -258,17 +276,29 @@
       .chibi-cat-3d-orange {
         animation: catChibiDance3D 0.85s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
         transform-origin: bottom center;
-        filter: drop-shadow(0 3px 6px rgba(234, 88, 12, 0.45)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.12));
+        filter: drop-shadow(0 3px 8px rgba(249, 115, 22, 0.55)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.15));
       }
-      .chibi-cat-3d-grey {
-        animation: catChibiDance3D 1.05s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+      .chibi-penguin-3d {
+        animation: penguinWaddle3D 0.65s ease-in-out infinite;
         transform-origin: bottom center;
-        filter: drop-shadow(0 3px 6px rgba(100, 116, 139, 0.45)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.12));
+        filter: drop-shadow(0 3px 7px rgba(15, 23, 42, 0.5)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.12));
       }
-      .chibi-cat-3d-caramel {
-        animation: catChibiDance3D 1.2s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+      .chibi-bunny-3d {
+        animation: bunnyBouncyHop 0.75s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
         transform-origin: bottom center;
-        filter: drop-shadow(0 3px 6px rgba(180, 83, 9, 0.45)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.12));
+        filter: drop-shadow(0 3px 7px rgba(244, 114, 182, 0.45)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.12));
+      }
+      .chibi-flipper-left {
+        animation: penguinFlippersJoy 0.4s ease-in-out infinite alternate;
+        transform-origin: top right;
+      }
+      .chibi-flipper-right {
+        animation: penguinFlippersJoy 0.4s ease-in-out infinite alternate-reverse;
+        transform-origin: top left;
+      }
+      .chibi-bunny-ear {
+        animation: earTwitch3D 2.5s ease-in-out infinite;
+        transform-origin: bottom center;
       }
       .chibi-running-active {
         animation: catFastRunFeet 0.3s ease-in-out infinite !important;

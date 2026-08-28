@@ -370,9 +370,9 @@ const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({
                         <span className="text-base shrink-0 select-none">🐾</span>
                         <p className="text-[10.5px] font-semibold text-slate-700 leading-snug">
                           {language === 'th' ? (
-                            <>แผนกที่ใช้ห้องสูงสุด 3 อันดับแรกประจำเดือน จะได้รับ<strong className="text-amber-800 font-extrabold">มาสคอตดุ๊กดิ๊ก</strong>ไปวิ่งบนรายการจอง (🥇: 🐱 แมว / 🥈: 🐶 หมา / 🥉: 🐰 กระต่าย)</>
+                            <>แผนกที่ใช้ห้องสูงสุด 3 อันดับแรกประจำเดือน จะได้รับ<strong className="text-amber-800 font-extrabold">มาสคอตดุ๊กดิ๊ก</strong>ไปวิ่งบนรายการจอง (🥇: 🐱 แมว / 🥈: 🐧 เพนกวิน / 🥉: 🐰 กระต่าย)</>
                           ) : (
-                            <>The Top 3 departments unlock living <strong className="text-amber-800 font-extrabold">mascots</strong> (🥇: 🐱 Cat, 🥈: 🐶 Dog, 🥉: 🐰 Bunny) on bookings.</>
+                            <>The Top 3 departments unlock living <strong className="text-amber-800 font-extrabold">mascots</strong> (🥇: 🐱 Cat, 🥈: 🐧 Penguin, 🥉: 🐰 Bunny) on bookings.</>
                           )}
                         </p>
                       </div>
@@ -879,9 +879,9 @@ export const InteractiveDancingCat: React.FC<{
   };
 
   // 3D Vibrant Theme Colors & Shading for Mascot Trio:
-  // Rank 1: 🐱 3D Bright Ginger Orange Tabby Cat + 3D Golden Crown 👑
-  // Rank 2: 🐶 3D Joyful Honey Corgi/Shiba Dog 🥈
-  // Rank 3: 🐰 3D Fluffy Snow White Bunny Rabbit 🥉
+  // Rank 1: 🐱 Ultra-Kawaii Ginger Tabby Cat + 3D Golden Crown 👑
+  // Rank 2: 🐧 Chibi Waddling Penguin with Orange Beak & Flippers 🥈
+  // Rank 3: 🐰 Fluffy Snow White Bunny Rabbit 🥉
   const theme = {
     1: {
       species: 'cat' as const,
@@ -903,32 +903,32 @@ export const InteractiveDancingCat: React.FC<{
       badge: '👑',
     },
     2: {
-      species: 'dog' as const,
-      name: 'น้องหมาคอร์กี้ดุ๊กดิ๊ก 🐶🥈 (แผนกอันดับ 2 ประจำเดือน)',
-      danceClass: 'chibi-cat-3d-orange',
+      species: 'penguin' as const,
+      name: 'น้องเพนกวินเตาะแตะ 🐧🥈 (แผนกอันดับ 2 ประจำเดือน)',
+      danceClass: 'chibi-penguin-3d',
       hasCrown: false,
-      id: 'corgi3d',
-      furLight: '#fef3c7',
-      furMid: '#f59e0b',
-      furMain: '#d97706',
-      furShadow: '#b45309',
-      furDeep: '#78350f',
+      id: 'penguin3d',
+      furLight: '#475569',
+      furMid: '#1e293b',
+      furMain: '#0f172a',
+      furShadow: '#020617',
+      furDeep: '#000000',
       bellyLight: '#ffffff',
-      bellyWarm: '#f8fafc',
-      eyeIris: '#451a03',
-      earPink: '#fed7aa',
-      cheeks: '#f43f5e',
-      stripes: '#92400e',
+      bellyWarm: '#f1f5f9',
+      eyeIris: '#0284c7',
+      earPink: '#f97316',
+      cheeks: '#fb7185',
+      stripes: '#f97316',
       badge: '🥈',
     },
     3: {
       species: 'bunny' as const,
-      name: 'น้องกระต่ายหูยาวดุ๊กดิ๊ก 🐰🥉 (แผนกอันดับ 3 ประจำเดือน)',
-      danceClass: 'chibi-cat-3d-grey',
+      name: 'น้องกระต่ายหูยาว 🐰🥉 (แผนกอันดับ 3 ประจำเดือน)',
+      danceClass: 'chibi-bunny-3d',
       hasCrown: false,
       id: 'bunny3d',
       furLight: '#ffffff',
-      furMid: '#f1f5f9',
+      furMid: '#f8fafc',
       furMain: '#e2e8f0',
       furShadow: '#cbd5e1',
       furDeep: '#94a3b8',
@@ -1046,7 +1046,7 @@ export const InteractiveDancingCat: React.FC<{
               </radialGradient>
             </defs>
 
-            {/* Tail: Cat curled / Dog wag / Bunny pom-pom */}
+            {/* Tail / Flippers */}
             {theme.species === 'cat' && (
               <path
                 d="M8 26C4 22 5 15 10 13C13 12 15 14 14 17C13 21 16 26 21 28"
@@ -1055,22 +1055,20 @@ export const InteractiveDancingCat: React.FC<{
                 strokeLinecap="round"
               />
             )}
-            {theme.species === 'dog' && (
-              <path
-                d="M7 23C4 19 6 13 11 15C14 16 13 20 16 25"
-                stroke={theme.furShadow}
-                strokeWidth="4.5"
-                strokeLinecap="round"
-              />
+            {theme.species === 'penguin' && (
+              <>
+                <ellipse cx="14" cy="28" rx="6" ry="3" fill="#f97316" />
+                <path d="M12 20C8 22 8 26 12 28" stroke="#0f172a" strokeWidth="3" strokeLinecap="round" />
+              </>
             )}
             {theme.species === 'bunny' && (
               <circle cx="7" cy="23" r="5" fill="#ffffff" stroke={theme.furShadow} strokeWidth="1" />
             )}
 
-            {/* 3D Curled Sleeping Loaf Body */}
+            {/* 3D Curled Sleeping Body */}
             <ellipse cx="26" cy="24" rx="20" ry="12.5" fill={`url(#sleepBody-${theme.id})`} />
 
-            {/* Stripes or Fur Patterns */}
+            {/* Belly / Stripes */}
             {theme.species === 'cat' && (
               <>
                 <path d="M19 14L21 18" stroke={theme.stripes} strokeWidth="1.8" strokeLinecap="round" opacity="0.85" />
@@ -1078,27 +1076,20 @@ export const InteractiveDancingCat: React.FC<{
                 <path d="M31 14L30 18" stroke={theme.stripes} strokeWidth="1.8" strokeLinecap="round" opacity="0.85" />
               </>
             )}
-            {theme.species === 'dog' && (
-              <ellipse cx="24" cy="24" rx="7" ry="5" fill="#ffffff" opacity="0.9" />
+            {theme.species === 'penguin' && (
+              <ellipse cx="27" cy="25" rx="14" ry="8.5" fill="#ffffff" />
             )}
 
-            {/* Sleeping Head Resting Forward */}
+            {/* Sleeping Head */}
             <circle cx="41" cy="20" r="12" fill={`url(#sleepHead-${theme.id})`} />
 
-            {/* Ears: Cat Pointy / Dog Floppy / Bunny Long */}
+            {/* Ears (Cat pointy, Bunny long) */}
             {theme.species === 'cat' && (
               <>
                 <path d="M33 13L37 4L42 11Z" fill={`url(#sleepHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.8" />
                 <path d="M35 12L38 6.5L41 10.5Z" fill={theme.earPink} />
                 <path d="M46 11L51 4L54 13Z" fill={`url(#sleepHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.8" />
                 <path d="M47.5 10.5L50.5 6.5L52.5 12Z" fill={theme.earPink} />
-              </>
-            )}
-            {theme.species === 'dog' && (
-              <>
-                <path d="M32 12C31 7 36 5 40 10C38 14 34 16 32 12Z" fill={`url(#sleepHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.8" />
-                <path d="M46 10C50 5 55 7 54 12C52 16 48 14 46 10Z" fill={`url(#sleepHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.8" />
-                <ellipse cx="36" cy="10" rx="2" ry="1.5" fill={theme.earPink} />
               </>
             )}
             {theme.species === 'bunny' && (
@@ -1113,30 +1104,39 @@ export const InteractiveDancingCat: React.FC<{
             {/* Head 3D Specular Highlight */}
             <ellipse cx="38" cy="14" rx="4.5" ry="2" fill="#ffffff" opacity="0.4" transform="rotate(-15 38 14)" />
 
-            {/* Sleeping Muzzle */}
-            <ellipse cx="40" cy="24" rx="4" ry="2.6" fill={`url(#sleepBelly-${theme.id})`} />
-            <ellipse cx="46" cy="24" rx="4" ry="2.6" fill={`url(#sleepBelly-${theme.id})`} />
+            {/* Sleeping Muzzle (Cat/Bunny) or Penguin White Face Mask */}
+            {theme.species !== 'penguin' ? (
+              <>
+                <ellipse cx="40" cy="24" rx="4" ry="2.6" fill={`url(#sleepBelly-${theme.id})`} />
+                <ellipse cx="46" cy="24" rx="4" ry="2.6" fill={`url(#sleepBelly-${theme.id})`} />
+              </>
+            ) : (
+              <>
+                <ellipse cx="37" cy="20" rx="3.5" ry="4" fill="#ffffff" />
+                <ellipse cx="45" cy="20" rx="3.5" ry="4" fill="#ffffff" />
+              </>
+            )}
 
             {/* Soft Blushing Cheeks 🌸 */}
             <circle cx="34" cy="23" r="3.5" fill={`url(#sleepCheek-${theme.id})`} />
-            <circle cx="50" cy="23" r="3.5" fill={`url(#sleepCheek-${theme.id})`} />
+            <circle cx="49" cy="23" r="3.5" fill={`url(#sleepCheek-${theme.id})`} />
 
             {/* Peaceful Sleeping Eyes */}
             <path d="M34 18.5C35.5 21 38 21 39.5 18.5" stroke="#0f172a" strokeWidth="1.8" strokeLinecap="round" />
-            <path d="M45 18.5C46.5 21 49 21 50.5 18.5" stroke="#0f172a" strokeWidth="1.8" strokeLinecap="round" />
+            <path d="M44 18.5C45.5 21 48 21 49.5 18.5" stroke="#0f172a" strokeWidth="1.8" strokeLinecap="round" />
 
-            {/* Nose & Cute Sleeping Mouth */}
-            <path d="M42.5 22L44.5 22L43.5 23.2Z" fill={theme.species === 'dog' ? '#0f172a' : '#f43f5e'} />
-            <path
-              d="M41 24.2C42 25.2 43.5 24.5 43.5 23.5C43.5 24.5 45 25.2 46 24.2"
-              stroke="#0f172a"
-              strokeWidth="1.2"
-              strokeLinecap="round"
-            />
-
-            {/* Whiskers (for Cat and Bunny) */}
-            {theme.species !== 'dog' && (
+            {/* Nose & Mouth (or Penguin Orange Beak) */}
+            {theme.species === 'penguin' ? (
+              <polygon points="40,21 44,21 42,25" fill="#f97316" stroke="#c2410c" strokeWidth="0.5" />
+            ) : (
               <>
+                <path d="M42.5 22L44.5 22L43.5 23.2Z" fill="#f43f5e" />
+                <path
+                  d="M41 24.2C42 25.2 43.5 24.5 43.5 23.5C43.5 24.5 45 25.2 46 24.2"
+                  stroke="#0f172a"
+                  strokeWidth="1.2"
+                  strokeLinecap="round"
+                />
                 <line x1="28" y1="21.5" x2="35" y2="23" stroke={theme.furShadow} strokeWidth="1" strokeLinecap="round" opacity="0.8" />
                 <line x1="28" y1="25" x2="35" y2="24.5" stroke={theme.furShadow} strokeWidth="1" strokeLinecap="round" opacity="0.8" />
                 <line x1="49" y1="23" x2="56" y2="21.5" stroke={theme.furShadow} strokeWidth="1" strokeLinecap="round" opacity="0.8" />
@@ -1144,12 +1144,15 @@ export const InteractiveDancingCat: React.FC<{
               </>
             )}
 
-            {/* Tucked Sleeping Front Paws under chin */}
-            <ellipse cx="38" cy="31" rx="4" ry="2.6" fill={`url(#sleepBelly-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.8" />
-            <circle cx="38" cy="31" r="1" fill={theme.earPink} />
-
-            <ellipse cx="47" cy="31" rx="4" ry="2.6" fill={`url(#sleepBelly-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.8" />
-            <circle cx="47" cy="31" r="1" fill={theme.earPink} />
+            {/* Front Paws / Sleeping Flippers */}
+            {theme.species !== 'penguin' && (
+              <>
+                <ellipse cx="38" cy="31" rx="4" ry="2.6" fill={`url(#sleepBelly-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.8" />
+                <circle cx="38" cy="31" r="1" fill={theme.earPink} />
+                <ellipse cx="47" cy="31" rx="4" ry="2.6" fill={`url(#sleepBelly-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.8" />
+                <circle cx="47" cy="31" r="1" fill={theme.earPink} />
+              </>
+            )}
           </svg>
         ) : (
           /* 3D Standing Joyful Dancing & Running Pose */
@@ -1185,7 +1188,7 @@ export const InteractiveDancingCat: React.FC<{
               </radialGradient>
             </defs>
 
-            {/* Animated Tail: Cat / Dog / Bunny */}
+            {/* Animated Tail: Cat / Bunny */}
             {theme.species === 'cat' && (
               <path
                 d="M10 42C4 36 2 24 7 17C9 14 12 16 11 20C9.5 24 10 32 15 37"
@@ -1195,20 +1198,11 @@ export const InteractiveDancingCat: React.FC<{
                 className="chibi-tail-3d"
               />
             )}
-            {theme.species === 'dog' && (
-              <path
-                d="M10 38C6 33 5 22 10 18C12 16 15 18 14 22C13 26 12 32 16 36"
-                stroke={theme.furShadow}
-                strokeWidth="5"
-                strokeLinecap="round"
-                className="chibi-tail-3d"
-              />
-            )}
             {theme.species === 'bunny' && (
               <circle cx="8" cy="38" r="6" fill="#ffffff" stroke={theme.furShadow} strokeWidth="1.2" className="chibi-tail-3d" />
             )}
 
-            {/* Ears: Cat / Dog / Bunny */}
+            {/* Ears: Cat Pointy / Bunny Long */}
             {theme.species === 'cat' && (
               <>
                 <path d="M14 18L19 7L27 16Z" fill={`url(#chibiHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="1" />
@@ -1217,20 +1211,12 @@ export const InteractiveDancingCat: React.FC<{
                 <path d="M37.5 15L42.5 10L46 16.5Z" fill={theme.earPink} />
               </>
             )}
-            {theme.species === 'dog' && (
-              <>
-                <path d="M13 18C11 11 17 6 23 12C20 18 16 19 13 18Z" fill={`url(#chibiHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="1" />
-                <path d="M15 16C13 12 17 9 20 13Z" fill={theme.earPink} />
-                <path d="M39 12C45 6 51 11 49 18C46 19 42 18 39 12Z" fill={`url(#chibiHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="1" />
-                <path d="M42 13C45 9 49 12 47 16Z" fill={theme.earPink} />
-              </>
-            )}
             {theme.species === 'bunny' && (
               <>
-                <path d="M16 20C12 8 16 -1 22 2C25 5 24 14 23 20Z" fill={`url(#chibiHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="1" />
-                <path d="M17.5 18C15 9 17 2 21 4C23 6 22 13 21 18Z" fill={theme.earPink} />
-                <path d="M39 20C38 14 37 5 40 2C46 -1 50 8 46 20Z" fill={`url(#chibiHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="1" />
-                <path d="M41 18C40 13 39 6 41 4C45 2 47 9 44.5 18Z" fill={theme.earPink} />
+                <path d="M16 20C12 8 16 -1 22 2C25 5 24 14 23 20Z" fill={`url(#chibiHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="1" className="chibi-bunny-ear" />
+                <path d="M17.5 18C15 9 17 2 21 4C23 6 22 13 21 18Z" fill={theme.earPink} className="chibi-bunny-ear" />
+                <path d="M39 20C38 14 37 5 40 2C46 -1 50 8 46 20Z" fill={`url(#chibiHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="1" className="chibi-bunny-ear" />
+                <path d="M41 18C40 13 39 6 41 4C45 2 47 9 44.5 18Z" fill={theme.earPink} className="chibi-bunny-ear" />
               </>
             )}
 
@@ -1238,9 +1224,9 @@ export const InteractiveDancingCat: React.FC<{
             <ellipse cx="31" cy="38" rx="16" ry="13.5" fill={`url(#chibiBody-${theme.id})`} />
 
             {/* 3D Chubby White Belly */}
-            <ellipse cx="31" cy="39" rx="10" ry="8.5" fill={`url(#chibiBelly-${theme.id})`} />
+            <ellipse cx="31" cy="39" rx="11" ry="9.5" fill={`url(#chibiBelly-${theme.id})`} />
 
-            {/* Cat Stripes or Dog Fur Pattern */}
+            {/* Cat Stripes */}
             {theme.species === 'cat' && (
               <>
                 <path d="M31 8L31 12" stroke={theme.stripes} strokeWidth="2.2" strokeLinecap="round" opacity="0.9" />
@@ -1255,15 +1241,24 @@ export const InteractiveDancingCat: React.FC<{
             {/* Forehead 3D Specular Highlight */}
             <ellipse cx="27" cy="13" rx="5.5" ry="2.6" fill="#ffffff" opacity="0.45" transform="rotate(-15 27 13)" />
 
-            {/* 3D Soft Muzzle */}
-            <ellipse cx="27" cy="24" rx="4.5" ry="3.2" fill={`url(#chibiBelly-${theme.id})`} />
-            <ellipse cx="35" cy="24" rx="4.5" ry="3.2" fill={`url(#chibiBelly-${theme.id})`} />
+            {/* 3D Muzzle / Face Mask */}
+            {theme.species !== 'penguin' ? (
+              <>
+                <ellipse cx="27" cy="24" rx="4.5" ry="3.2" fill={`url(#chibiBelly-${theme.id})`} />
+                <ellipse cx="35" cy="24" rx="4.5" ry="3.2" fill={`url(#chibiBelly-${theme.id})`} />
+              </>
+            ) : (
+              <>
+                <circle cx="26" cy="20" r="5" fill="#ffffff" />
+                <circle cx="36" cy="20" r="5" fill="#ffffff" />
+              </>
+            )}
 
             {/* Blushing Pink Cheeks 🌸 */}
             <circle cx="21" cy="23.5" r="4" fill={`url(#chibiCheek-${theme.id})`} />
             <circle cx="41" cy="23.5" r="4" fill={`url(#chibiCheek-${theme.id})`} />
 
-            {/* Sparkling Kawaii 3D Anime Eyes */}
+            {/* Sparkling Kawaii Anime Eyes */}
             {isScared ? (
               <>
                 <circle cx="24" cy="18" r="4" fill="#ffffff" stroke="#0f172a" strokeWidth="1.2" />
@@ -1275,45 +1270,62 @@ export const InteractiveDancingCat: React.FC<{
               </>
             ) : (
               <>
-                <ellipse cx="24" cy="18" rx="3.5" ry="4.2" fill="#0f172a" />
-                <ellipse cx="38" cy="18" rx="3.5" ry="4.2" fill="#0f172a" />
-                <ellipse cx="24" cy="19.5" rx="2.6" ry="2" fill={theme.eyeIris} opacity="0.9" />
-                <ellipse cx="38" cy="19.5" rx="2.6" ry="2" fill={theme.eyeIris} opacity="0.9" />
-                <circle cx="22.8" cy="16.2" r="1.5" fill="#ffffff" />
-                <circle cx="36.8" cy="16.2" r="1.5" fill="#ffffff" />
-                <circle cx="25.5" cy="19.5" r="0.8" fill="#ffffff" />
-                <circle cx="39.5" cy="19.5" r="0.8" fill="#ffffff" />
+                <ellipse cx="24" cy="18" rx="3.8" ry="4.6" fill="#0f172a" />
+                <ellipse cx="38" cy="18" rx="3.8" ry="4.6" fill="#0f172a" />
+                <ellipse cx="24" cy="19.5" rx="2.8" ry="2.2" fill={theme.eyeIris} opacity="0.9" />
+                <ellipse cx="38" cy="19.5" rx="2.8" ry="2.2" fill={theme.eyeIris} opacity="0.9" />
+                <circle cx="22.8" cy="16.2" r="1.6" fill="#ffffff" />
+                <circle cx="36.8" cy="16.2" r="1.6" fill="#ffffff" />
+                <circle cx="25.5" cy="19.5" r="0.9" fill="#ffffff" />
+                <circle cx="39.5" cy="19.5" r="0.9" fill="#ffffff" />
               </>
             )}
 
-            {/* Nose & Mouth */}
-            <path d="M30 22.2L32 22.2L31 23.5Z" fill={theme.species === 'dog' ? '#0f172a' : '#f43f5e'} />
-            <path
-              d="M28.5 24.5C29.8 26 31 25.2 31 24.2C31 25.2 32.2 26 33.5 24.5"
-              stroke="#0f172a"
-              strokeWidth="1.4"
-              strokeLinecap="round"
-            />
+            {/* Nose & Mouth (or Penguin Beak) */}
+            {theme.species === 'penguin' ? (
+              <polygon points="28,21 34,21 31,26" fill="#f97316" stroke="#c2410c" strokeWidth="0.8" />
+            ) : (
+              <>
+                <path d="M30 22.2L32 22.2L31 23.5Z" fill="#f43f5e" />
+                <path
+                  d="M28.5 24.5C29.8 26 31 25.2 31 24.2C31 25.2 32.2 26 33.5 24.5"
+                  stroke="#0f172a"
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                />
+                <line x1="15" y1="23.5" x2="23" y2="24.5" stroke={theme.furShadow} strokeWidth="1.2" strokeLinecap="round" opacity="0.85" />
+                <line x1="15" y1="26.5" x2="23" y2="26" stroke={theme.furShadow} strokeWidth="1.2" strokeLinecap="round" opacity="0.85" />
+                <line x1="39" y1="24.5" x2="47" y2="23.5" stroke={theme.furShadow} strokeWidth="1.2" strokeLinecap="round" opacity="0.85" />
+                <line x1="39" y1="26" x2="47" y2="26.5" stroke={theme.furShadow} strokeWidth="1.2" strokeLinecap="round" opacity="0.85" />
+              </>
+            )}
 
-            <line x1="14" y1="21.5" x2="22" y2="23" stroke={theme.furShadow} strokeWidth="1.2" strokeLinecap="round" opacity="0.8" />
-            <line x1="14" y1="25.5" x2="22" y2="25" stroke={theme.furShadow} strokeWidth="1.2" strokeLinecap="round" opacity="0.8" />
-            <line x1="40" y1="23" x2="48" y2="21.5" stroke={theme.furShadow} strokeWidth="1.2" strokeLinecap="round" opacity="0.8" />
-            <line x1="40" y1="25" x2="48" y2="25.5" stroke={theme.furShadow} strokeWidth="1.2" strokeLinecap="round" opacity="0.8" />
-
-            {/* 3D Joyful Squishy Paws with Pink Jelly Beans */}
-            <g className="chibi-paws-3d">
-              {/* Left Paw */}
-              <ellipse cx="21" cy="33" rx="3.8" ry="3" fill={`url(#chibiBelly-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.9" />
-              <circle cx="21" cy="33" r="1.3" fill={theme.earPink} />
-
-              {/* Right Paw */}
-              <ellipse cx="41" cy="33" rx="3.8" ry="3" fill={`url(#chibiBelly-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.9" />
-              <circle cx="41" cy="33" r="1.3" fill={theme.earPink} />
-            </g>
-
-            {/* 3D Chubby Feet */}
-            <ellipse cx="23" cy="49" rx="4.8" ry="3.2" fill={`url(#chibiHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.9" />
-            <ellipse cx="39" cy="49" rx="4.8" ry="3.2" fill={`url(#chibiHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.9" />
+            {/* Paws / Flippers & Feet */}
+            {theme.species === 'penguin' ? (
+              <>
+                {/* Flapping Penguin Flippers */}
+                <ellipse cx="14" cy="36" rx="3.8" ry="7.5" fill="#0f172a" stroke="#020617" strokeWidth="0.8" className="chibi-flipper-left" />
+                <ellipse cx="48" cy="36" rx="3.8" ry="7.5" fill="#0f172a" stroke="#020617" strokeWidth="0.8" className="chibi-flipper-right" />
+                {/* Orange Waddling Feet */}
+                <ellipse cx="25" cy="50" rx="5" ry="3.2" fill="#f97316" stroke="#c2410c" strokeWidth="0.8" />
+                <ellipse cx="37" cy="50" rx="5" ry="3.2" fill="#f97316" stroke="#c2410c" strokeWidth="0.8" />
+              </>
+            ) : (
+              <>
+                {/* 3D Joyful Squishy Paws with Pink Jelly Beans */}
+                <g className="chibi-paws-3d">
+                  <ellipse cx="21" cy="33" rx="3.8" ry="3" fill={`url(#chibiBelly-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.9" />
+                  <circle cx="21" cy="33" r="1.3" fill={theme.earPink} />
+                  <ellipse cx="41" cy="33" rx="3.8" ry="3" fill={`url(#chibiBelly-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.9" />
+                  <circle cx="41" cy="33" r="1.3" fill={theme.earPink} />
+                </g>
+                {/* 3D Chubby Feet */}
+                <ellipse cx="23" cy="49" rx="4.8" ry="3.2" fill={`url(#chibiBelly-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.9" />
+                <circle cx="23" cy="49" r="1.3" fill={theme.earPink} />
+                <ellipse cx="39" cy="49" rx="4.8" ry="3.2" fill={`url(#chibiBelly-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.9" />
+                <circle cx="39" cy="49" r="1.3" fill={theme.earPink} />
+              </>
+            )}
           </svg>
         )}
       </div>

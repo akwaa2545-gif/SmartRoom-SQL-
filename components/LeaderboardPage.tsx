@@ -282,9 +282,9 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
                 <span className="text-lg shrink-0 select-none">🐾</span>
                 <div className="text-[11.5px] font-semibold text-slate-700 leading-snug">
                   {language === 'th' ? (
-                    <>แผนกที่ใช้งานห้องสูงสุด 3 อันดับแรกประจำเดือน จะได้รับ<strong className="text-amber-800 font-black">มาสคอตดุ๊กดิ๊ก</strong>ไปวิ่งบนรายการจอง (อันดับ 1: 🐱 น้องแมว 👑 / อันดับ 2: 🐶 น้องหมา 🥈 / อันดับ 3: 🐰 น้องกระต่าย 🥉)</>
+                    <>แผนกที่ใช้งานห้องสูงสุด 3 อันดับแรกประจำเดือน จะได้รับ<strong className="text-amber-800 font-black">มาสคอตดุ๊กดิ๊ก</strong>ไปวิ่งบนรายการจอง (อันดับ 1: 🐱 น้องแมว 👑 / อันดับ 2: 🐧 น้องเพนกวิน 🥈 / อันดับ 3: 🐰 น้องกระต่าย 🥉)</>
                   ) : (
-                    <>The Top 3 departments unlock exclusive <strong className="text-amber-800 font-black">living mascots</strong> on their bookings (1st: 🐱 King Cat 👑, 2nd: 🐶 Joyful Dog 🥈, 3rd: 🐰 Bunny 🥉).</>
+                    <>The Top 3 departments unlock exclusive <strong className="text-amber-800 font-black">living mascots</strong> on their bookings (1st: 🐱 King Cat 👑, 2nd: 🐧 Waddling Penguin 🥈, 3rd: 🐰 Bunny 🥉).</>
                   )}
                 </div>
               </div>
