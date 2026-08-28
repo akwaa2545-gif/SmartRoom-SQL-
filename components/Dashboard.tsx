@@ -215,7 +215,11 @@ const Dashboard: React.FC<DashboardProps> = ({
   const organizerLeaderboardRankMap = useMemo(() => {
     const map = new Map<string, number>();
     currentMonthLeaderboardStats.users.forEach((u) => {
-      if (u.name) map.set(u.name.trim().toLowerCase(), u.rank);
+      if (u.name) {
+        map.set(u.name.trim().toLowerCase(), u.rank);
+        const stripped = u.name.trim().toLowerCase().replace(/\s*\.?\s*[a-z]\.?$/i, '').trim();
+        if (stripped) map.set(stripped, u.rank);
+      }
       if (u.employeeId) map.set(u.employeeId.trim().toLowerCase(), u.rank);
       if (u.email) map.set(u.email.trim().toLowerCase(), u.rank);
     });

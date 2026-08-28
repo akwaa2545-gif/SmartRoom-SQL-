@@ -173,11 +173,28 @@ export const calculateLeaderboardStats = (
 
       const emailDisplayName = (b.emailDisplayName || "").trim();
       const organizer = (b.organizer || "").trim();
-      const name = emailDisplayName || organizer || email || "Guest";
-
-      // Primary group key prioritizes email, then emailDisplayName to unify bookings, fallback to organizer
-      const key = email || (emailDisplayName ? emailDisplayName.toLowerCase() : organizer.toLowerCase()) || "guest";
       const dept = b.department || b.emailDepartment || "Other";
+      const cleanDept = dept.trim().toLowerCase();
+
+      // Canonical resolution: extract root name (e.g. "Natkritta S." -> "natkritta", "Natkritta" -> "natkritta")
+      const candidateName = emailDisplayName || organizer || email || "Guest";
+      const strippedName = candidateName
+        .toLowerCase()
+        .replace(/\s*\.?\s*[a-z]\.?$/i, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      const emailPrefix = email
+        ? email.split('@')[0].replace(/\.[a-z]$/i, '').trim()
+        : '';
+
+      // Unify same-person entries under same department or core name
+      const key = (strippedName && strippedName !== 'guest' && strippedName !== '-')
+        ? `dept:${cleanDept}:${strippedName}`
+        : emailPrefix
+          ? `dept:${cleanDept}:${emailPrefix}`
+          : email || candidateName.toLowerCase();
+
       const bStart =
         b.startTime instanceof Date ? b.startTime : new Date(b.startTime);
       const bEnd = b.endTime instanceof Date ? b.endTime : new Date(b.endTime);
@@ -187,7 +204,7 @@ export const calculateLeaderboardStats = (
       );
 
       const existing = userMap.get(key) || {
-        name,
+        name: candidateName,
         department: dept,
         employeeId: b.employeeId,
         email: b.email,
@@ -196,15 +213,15 @@ export const calculateLeaderboardStats = (
         verifiedBookings: 0,
       };
 
-      // Always prioritize authoritative EmailDisplayName over typed Organizer name
+      // Always prioritize authoritative EmailDisplayName or the most informative full name
       if (emailDisplayName && emailDisplayName !== "Guest") {
         existing.name = emailDisplayName;
       } else if (
-        name &&
-        name !== "Guest" &&
-        (!existing.name || existing.name === "Guest" || existing.name === email)
+        candidateName &&
+        candidateName !== "Guest" &&
+        (!existing.name || existing.name === "Guest" || existing.name.length < candidateName.length)
       ) {
-        existing.name = name;
+        existing.name = candidateName;
       }
 
       if (b.employeeId && !existing.employeeId) {
