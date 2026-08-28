@@ -605,12 +605,7 @@ const SmartRoomApplication: React.FC = () => {
       const interval = window.setInterval(() => void loadBookings(), 30_000);
       return () => { cancelled = true; window.clearInterval(interval); };
     }
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const bookingsQuery = query(
-      collection(db, 'bookings'),
-      where('endTime', '>=', thirtyDaysAgo)
-    );
+    const bookingsQuery = collection(db, 'bookings');
 
     const unsubscribe = onSnapshot(bookingsQuery, (snapshot) => {
       if (snapshot.empty) {
