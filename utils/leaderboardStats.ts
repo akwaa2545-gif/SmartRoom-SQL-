@@ -175,20 +175,11 @@ export const calculateLeaderboardStats = (
       const organizer = (b.organizer || "").trim();
       const dept = b.department || b.emailDepartment || "Other";
 
-      // 1. Extract first root token of the name (e.g. "natkritta" from "Natkritta S.", "Natkritta .S", "Natkritta")
       const candidateName = emailDisplayName || organizer || email || "Guest";
-      const nameParts = candidateName.toLowerCase().split(/[\s._-]+/).filter(Boolean);
-      const rootFirstName = nameParts[0] || 'guest';
 
-      const emailParts = email ? email.split('@')[0].split(/[\s._-]+/).filter(Boolean) : [];
-      const rootEmailName = emailParts[0] || '';
-
-      const personRoot = (rootFirstName && rootFirstName !== 'guest' && rootFirstName !== 'unknown')
-        ? rootFirstName
-        : rootEmailName || 'guest';
-
-      // 2. Unify by personRoot so that any variation of "Natkritta" is always 1 single person!
-      const key = personRoot !== 'guest' ? `person:${personRoot}` : `guest:${candidateName.toLowerCase()}`;
+      // Strict Corporate Email Identity:
+      // Group by official Email address to match SQL Server database records 100%
+      const key = email || (emailDisplayName ? emailDisplayName.toLowerCase() : organizer.toLowerCase().trim()) || "guest";
 
       const bStart =
         b.startTime instanceof Date ? b.startTime : new Date(b.startTime);
