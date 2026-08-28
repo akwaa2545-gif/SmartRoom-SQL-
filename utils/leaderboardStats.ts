@@ -177,22 +177,9 @@ export const calculateLeaderboardStats = (
 
       const candidateName = (emailDisplayName || organizer || email || "Guest").trim();
 
-      // Extract unified first name token (e.g. "Natkritta S." -> "natkritta", "Natkritta" -> "natkritta", "K.Natcha J." -> "natcha")
-      const cleanName = candidateName
-        .toLowerCase()
-        .replace(/^(k\.|khun\s+)/i, '')
-        .trim();
-      const nameParts = cleanName.split(/[\s._-]+/).filter(Boolean);
-      const rootFirstName = nameParts[0] || 'guest';
-
-      const emailPrefix = email ? email.split('@')[0].split(/[\s._-]+/).filter(Boolean)[0] : '';
-      const personToken = (rootFirstName && rootFirstName !== 'guest' && rootFirstName !== 'meeting')
-        ? rootFirstName
-        : emailPrefix || 'guest';
-
-      // Unified Person Key: merges same-person name variations in same department into 1 single entry
-      const cleanDept = dept.trim().toLowerCase().replace(/[^a-z0-9]/g, '') || 'general';
-      const key = personToken !== 'guest' ? `person:${cleanDept}:${personToken}` : `guest:${candidateName.toLowerCase()}`;
+      // Strict Corporate Email Identity:
+      // Group by official Email address to match SQL Server database records 100%
+      const key = email || (emailDisplayName ? `name:${emailDisplayName.toLowerCase().trim()}` : `name:${organizer.toLowerCase().trim()}`) || "guest";
 
       const bStart =
         b.startTime instanceof Date ? b.startTime : new Date(b.startTime);
