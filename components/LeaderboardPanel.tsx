@@ -370,7 +370,7 @@ const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({
                         <span className="text-base shrink-0 select-none">🐱</span>
                         <p className="text-[10.5px] font-semibold text-slate-700 leading-snug">
                           {language === 'th' ? (
-                            <>แผนกที่มีการใช้งานห้องสูงสุด 3 อันดับแรกประจำเดือน จะได้รับ<strong className="text-amber-800 font-extrabold">อนิเมชั่นแมว</strong>ไปวิ่งบนรายการจอง</>
+                            <>แผนกที่มีการใช้งานห้องสูงสุด 3 อันดับแรกประจำเดือน จะได้รับ<strong className="text-amber-800 font-extrabold">น้องแมวดุ๊กดิ๊ก</strong>ไปวิ่งบนรายการจอง</>
                           ) : (
                             <>The Top 3 departments each month unlock the <strong className="text-amber-800 font-extrabold">dancing cat mascot</strong> on their bookings.</>
                           )}

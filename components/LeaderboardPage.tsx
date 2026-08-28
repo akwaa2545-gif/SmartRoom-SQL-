@@ -282,7 +282,7 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
                 <span className="text-lg shrink-0 select-none">🐱</span>
                 <div className="text-[11.5px] font-semibold text-slate-700 leading-snug">
                   {language === 'th' ? (
-                    <>แผนกที่มีการใช้งานห้องประชุมรวมสูงสุด 3 อันดับแรกประจำเดือน จะได้รับ<strong className="text-amber-800 font-black">อนิเมชั่นแมวดุ๊กดิ๊ก</strong>ไปวิ่งประจำบนรายการจองของแผนก</>
+                    <>แผนกที่มีการใช้งานห้องประชุมรวมสูงสุด 3 อันดับแรกประจำเดือน จะได้รับ<strong className="text-amber-800 font-black">น้องแมวดุ๊กดิ๊ก</strong>ไปวิ่งประจำบนรายการจองของแผนก</>
                   ) : (
                     <>The Top 3 departments with highest monthly meeting hours unlock the <strong className="text-amber-800 font-black">animated dancing cat mascot</strong> running on their department bookings.</>
                   )}
