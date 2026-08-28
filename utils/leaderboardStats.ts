@@ -174,26 +174,21 @@ export const calculateLeaderboardStats = (
       const emailDisplayName = (b.emailDisplayName || "").trim();
       const organizer = (b.organizer || "").trim();
       const dept = b.department || b.emailDepartment || "Other";
-      const cleanDept = dept.trim().toLowerCase();
 
-      // Canonical resolution: extract root name (e.g. "Natkritta S." -> "natkritta", "Natkritta" -> "natkritta")
+      // 1. Extract first root token of the name (e.g. "natkritta" from "Natkritta S.", "Natkritta .S", "Natkritta")
       const candidateName = emailDisplayName || organizer || email || "Guest";
-      const strippedName = candidateName
-        .toLowerCase()
-        .replace(/\s*\.?\s*[a-z]\.?$/i, '')
-        .replace(/\s+/g, ' ')
-        .trim();
+      const nameParts = candidateName.toLowerCase().split(/[\s._-]+/).filter(Boolean);
+      const rootFirstName = nameParts[0] || 'guest';
 
-      const emailPrefix = email
-        ? email.split('@')[0].replace(/\.[a-z]$/i, '').trim()
-        : '';
+      const emailParts = email ? email.split('@')[0].split(/[\s._-]+/).filter(Boolean) : [];
+      const rootEmailName = emailParts[0] || '';
 
-      // Unify same-person entries under same department or core name
-      const key = (strippedName && strippedName !== 'guest' && strippedName !== '-')
-        ? `dept:${cleanDept}:${strippedName}`
-        : emailPrefix
-          ? `dept:${cleanDept}:${emailPrefix}`
-          : email || candidateName.toLowerCase();
+      const personRoot = (rootFirstName && rootFirstName !== 'guest' && rootFirstName !== 'unknown')
+        ? rootFirstName
+        : rootEmailName || 'guest';
+
+      // 2. Unify by personRoot so that any variation of "Natkritta" is always 1 single person!
+      const key = personRoot !== 'guest' ? `person:${personRoot}` : `guest:${candidateName.toLowerCase()}`;
 
       const bStart =
         b.startTime instanceof Date ? b.startTime : new Date(b.startTime);
@@ -213,7 +208,7 @@ export const calculateLeaderboardStats = (
         verifiedBookings: 0,
       };
 
-      // Always prioritize authoritative EmailDisplayName or the most informative full name
+      // Always prioritize authoritative EmailDisplayName or the most complete full name
       if (emailDisplayName && emailDisplayName !== "Guest") {
         existing.name = emailDisplayName;
       } else if (
