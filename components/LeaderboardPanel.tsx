@@ -342,9 +342,47 @@ const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({
               )}
             </div>
 
-            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2.5 divide-y divide-slate-100/60 max-h-[50vh]">
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3 max-h-[50vh]">
+              {/* Monthly Honor & Mascot Tip Banner (#) */}
+              <div className="rounded-2xl border border-amber-200/80 bg-gradient-to-r from-amber-50 via-orange-50/50 to-amber-50/30 p-3 sm:p-3.5 shadow-2xs">
+                <div className="flex items-start gap-2.5">
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 text-white font-black text-xs shadow-2xs select-none">
+                    #
+                  </div>
+                  <div className="space-y-1.5 min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px] font-black text-amber-950 uppercase tracking-wider">
+                        {language === 'th' ? 'เกร็ดความรู้รางวัลประจำเดือน' : 'Monthly Rewards & Honor Tips'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div className="flex items-start gap-2 bg-white/90 border border-amber-100/90 rounded-xl p-2 shadow-2xs">
+                        <span className="text-base shrink-0 select-none">👑</span>
+                        <p className="text-[10.5px] font-semibold text-slate-700 leading-snug">
+                          {language === 'th' ? (
+                            <>ใครที่ใช้ห้องสูงสุดในเดือนนั้น จะได้รับ<strong className="text-amber-800 font-extrabold">เหรียญเกียรติยศ</strong> (King, Master, Champion) ประดับบนการ์ดจอง</>
+                          ) : (
+                            <>Top room users each month receive exclusive <strong className="text-amber-800 font-extrabold">Honor Medals</strong> (King, Master, Champion) on their bookings.</>
+                          )}
+                        </p>
+                      </div>
+                      <div className="flex items-start gap-2 bg-white/90 border border-amber-100/90 rounded-xl p-2 shadow-2xs">
+                        <span className="text-base shrink-0 select-none">🐱</span>
+                        <p className="text-[10.5px] font-semibold text-slate-700 leading-snug">
+                          {language === 'th' ? (
+                            <>แผนกที่มีการใช้งานห้องสูงสุด 3 อันดับแรกประจำเดือน จะได้รับ<strong className="text-amber-800 font-extrabold">อนิเมชั่นแมว</strong>ไปวิ่งบนรายการจอง</>
+                          ) : (
+                            <>The Top 3 departments each month unlock the <strong className="text-amber-800 font-extrabold">dancing cat mascot</strong> on their bookings.</>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {activeTab === 'users' && (
-                <>
+                <div className="space-y-2.5 divide-y divide-slate-100/60">
                   {filteredUsers.length === 0 ? (
                     <div className="py-12 text-center text-slate-400 text-xs font-medium">
                       {t.noData}
@@ -408,7 +446,7 @@ const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({
                       );
                     })
                   )}
-                </>
+                </div>
               )}
 
               {activeTab === 'rooms' && (

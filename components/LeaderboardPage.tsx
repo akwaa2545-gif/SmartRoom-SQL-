@@ -254,6 +254,45 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
         </div>
       </div>
 
+      {/* MONTHLY HONOR & MASCOT TIP BANNER (#) */}
+      <div className="rounded-2xl border border-amber-200/90 bg-gradient-to-r from-amber-50 via-orange-50/60 to-amber-50/40 p-3.5 sm:p-4 shadow-xs">
+        <div className="flex items-start gap-3">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 text-white font-black text-sm shadow-xs select-none">
+            #
+          </div>
+          <div className="space-y-2 min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-amber-950 uppercase tracking-wider">
+                {language === 'th' ? 'เกร็ดความรู้รางวัลเกียรติยศประจำเดือน' : 'Monthly Honor & Mascot Rewards'}
+              </span>
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              <div className="flex items-start gap-2.5 bg-white/90 border border-amber-100/80 rounded-xl p-2.5 shadow-2xs">
+                <span className="text-lg shrink-0 select-none">👑</span>
+                <div className="text-[11.5px] font-semibold text-slate-700 leading-snug">
+                  {language === 'th' ? (
+                    <>ใครที่มีชั่วโมงการใช้งานห้องประชุมสูงสุดในเดือนนั้น จะได้รับ<strong className="text-amber-800 font-black">เหรียญและตำแหน่งเกียรติยศ</strong> (King, Master, Champion, Elite, Star) ประดับบนการ์ดจอง</>
+                  ) : (
+                    <>Top room users with the highest monthly meeting hours earn prestigious <strong className="text-amber-800 font-black">Honor Medals & Titles</strong> (King, Master, Champion) on their bookings.</>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-start gap-2.5 bg-white/90 border border-amber-100/80 rounded-xl p-2.5 shadow-2xs">
+                <span className="text-lg shrink-0 select-none">🐱</span>
+                <div className="text-[11.5px] font-semibold text-slate-700 leading-snug">
+                  {language === 'th' ? (
+                    <>แผนกที่มีการใช้งานห้องประชุมรวมสูงสุด 3 อันดับแรกประจำเดือน จะได้รับ<strong className="text-amber-800 font-black">อนิเมชั่นแมวดุ๊กดิ๊ก</strong>ไปวิ่งประจำบนรายการจองของแผนก</>
+                  ) : (
+                    <>The Top 3 departments with highest monthly meeting hours unlock the <strong className="text-amber-800 font-black">animated dancing cat mascot</strong> running on their department bookings.</>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* TOP 3 PODIUM SECTION */}
       {topThree.length >= 3 && !searchQuery && departmentFilter === 'ALL' && (
         <section className="relative overflow-hidden rounded-3xl border border-amber-200/80 bg-gradient-to-b from-amber-500/10 via-orange-500/5 to-white p-6 shadow-sm">

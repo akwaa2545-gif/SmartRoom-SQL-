@@ -1203,7 +1203,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                   <div
                     key={room.id}
                     onClick={() => setSelectedRoomId(room.id)}
-                    className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-lg transition-all duration-300 flex flex-col h-[460px] text-slate-800 cursor-pointer hover:border-brand-300 hover:scale-[1.01]"
+                    className="group/room-card bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-xl transition-all duration-300 flex flex-col min-h-[460px] h-auto text-slate-800 cursor-pointer hover:border-brand-300 hover:scale-[1.015] relative"
                   >
                     <div
                       className="relative h-32 overflow-hidden flex-shrink-0 z-0"
@@ -1270,9 +1270,14 @@ const Dashboard: React.FC<DashboardProps> = ({
                         )}
 
                         {/* Daily Itinerary / Scrollable Timeline */}
-                        <div className="space-y-2">
-                          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                            {t.scheduleToday}
+                        <div className="space-y-2 relative">
+                          <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                            <span>{t.scheduleToday}</span>
+                            {sortedItineraryItems.length > 2 && (
+                              <span className="text-[9px] font-bold text-brand-600 bg-brand-50 border border-brand-200/60 px-1.5 py-0.2 rounded-full transition-colors group-hover/room-card:bg-brand-500 group-hover/room-card:text-white group-hover/room-card:border-brand-500">
+                                {sortedItineraryItems.length} {language === 'th' ? 'รายการ' : 'bookings'}
+                              </span>
+                            )}
                           </div>
 
                           {sortedItineraryItems.length === 0 ? (
@@ -1280,71 +1285,85 @@ const Dashboard: React.FC<DashboardProps> = ({
                               {t.noBookingsToday}
                             </div>
                           ) : (
-                            <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
-                              {sortedItineraryItems.map(item => {
-                                if (item.type === 'maintenance') {
-                                  return (
-                                    <div key="maint" className="p-2 rounded-lg bg-slate-50 border border-slate-200 flex flex-col justify-start">
-                                      <div className="flex justify-between items-start mb-0.5">
-                                        <div className="font-bold text-slate-700 text-[11px] truncate flex items-center">
-                                          <span className="w-1.5 h-1.5 rounded-full bg-slate-500 mr-1.5"></span>
-                                          {temporarilyDisabledLabel}
+                            <div className="relative">
+                              <div className={`space-y-1.5 transition-all duration-300 ease-out ${
+                                sortedItineraryItems.length > 2
+                                  ? 'max-h-[140px] group-hover/room-card:max-h-[520px] overflow-y-auto pr-1'
+                                  : 'max-h-none'
+                              }`}>
+                                {sortedItineraryItems.map(item => {
+                                  if (item.type === 'maintenance') {
+                                    return (
+                                      <div key="maint" className="p-2 rounded-lg bg-slate-50 border border-slate-200 flex flex-col justify-start">
+                                        <div className="flex justify-between items-start mb-0.5">
+                                          <div className="font-bold text-slate-700 text-[11px] truncate flex items-center">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-slate-500 mr-1.5"></span>
+                                            {temporarilyDisabledLabel}
+                                          </div>
+                                          <span className="text-[9px] font-mono text-slate-500 font-bold whitespace-nowrap">
+                                            {getDisabledTimePeriod(item.startHour, item.endHour)}
+                                          </span>
                                         </div>
+                                        <div className="text-[10px] text-slate-600 font-semibold italic truncate" title={item.title}>
+                                          {item.title}
+                                        </div>
+                                      </div>
+                                    );
+                                  }
+                                  const b = item.data;
+                                  const noCheckIn = isNoCheckIn(b);
+                                  const displayState = getBookingDisplayState(b);
+                                  const leaderboardRank = getBookingLeaderboardRank(b);
+                                  const honor = getLeaderboardHonorInfo(leaderboardRank, language);
+                                  const departmentRank = getBookingDepartmentRank(b);
+
+                                  return (
+                                    <div key={b.id} className={`p-2 rounded-lg border text-[11px] transition-all relative ${
+                                      getBookingDepartmentClass(b.department, { context: 'timeline' })
+                                    } ${honor ? honor.frameClass : ''} ${noCheckIn ? 'border-rose-400 opacity-90' : b.id === roomStats.currentBooking?.id
+                                      ? 'border-slate-300/50 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.35)]'
+                                      : 'border-slate-300/40 hover:border-slate-400/60'
+                                      }`}>
+                                      <div className="flex justify-between items-start mb-0.5 gap-1.5">
+                                        <span className="font-bold text-slate-800 truncate max-w-[130px]">
+                                          {translateText(b.title, language)}
+                                        </span>
                                         <span className="text-[9px] font-mono text-slate-500 font-bold whitespace-nowrap">
-                                          {getDisabledTimePeriod(item.startHour, item.endHour)}
+                                          {formatTimeLocal(b.startTime, language)} - {formatTimeLocal(b.endTime, language)}
                                         </span>
                                       </div>
-                                      <div className="text-[10px] text-slate-600 font-semibold italic truncate" title={item.title}>
-                                        {item.title}
+                                      <div className="flex items-center justify-between text-[10px] text-slate-500 font-semibold gap-1">
+                                        <div className="flex items-center truncate mr-1">
+                                          <User className="w-2.5 h-2.5 mr-1 text-slate-400 shrink-0" />
+                                          <span className="truncate flex items-center gap-1 font-bold text-slate-800">
+                                            {honor && <span title={`${honor.shortTitle} #${leaderboardRank}`}>{honor.icon}</span>}
+                                            <span className="truncate">{b.organizer}</span>
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-1 shrink-0">
+                                          {departmentRank && departmentRank <= 3 && (
+                                            <TopRankHonorMascot rank={departmentRank} isUsed={displayState === 'used'} colSpan={1} />
+                                          )}
+                                          <span
+                                            title={displayState === 'waitForVerify' || displayState === 'roomInUse' || displayState === 'noCheckIn' ? checkInWindowTooltip : undefined}
+                                            className={`text-[9px] px-1.5 py-0.5 rounded font-bold border ${getBookingStatusBadgeClass(displayState, b.department, 'timeline')}`}
+                                          >
+                                            {getBookingDisplayLabel(b)}
+                                          </span>
+                                        </div>
                                       </div>
                                     </div>
                                   );
-                                }
-                                const b = item.data;
-                                const noCheckIn = isNoCheckIn(b);
-                                const displayState = getBookingDisplayState(b);
-                                const leaderboardRank = getBookingLeaderboardRank(b);
-                                const honor = getLeaderboardHonorInfo(leaderboardRank, language);
-                                const departmentRank = getBookingDepartmentRank(b);
-
-                                return (
-                                  <div key={b.id} className={`p-2 rounded-lg border text-[11px] transition-all relative ${
-                                    getBookingDepartmentClass(b.department, { context: 'timeline' })
-                                  } ${honor ? honor.frameClass : ''} ${noCheckIn ? 'border-rose-400 opacity-90' : b.id === roomStats.currentBooking?.id
-                                    ? 'border-slate-300/50 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.35)]'
-                                    : 'border-slate-300/40 hover:border-slate-400/60'
-                                    }`}>
-                                    <div className="flex justify-between items-start mb-0.5 gap-1.5">
-                                      <span className="font-bold text-slate-800 truncate max-w-[130px]">
-                                        {translateText(b.title, language)}
-                                      </span>
-                                      <span className="text-[9px] font-mono text-slate-500 font-bold whitespace-nowrap">
-                                        {formatTimeLocal(b.startTime, language)} - {formatTimeLocal(b.endTime, language)}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center justify-between text-[10px] text-slate-500 font-semibold gap-1">
-                                      <div className="flex items-center truncate mr-1">
-                                        <User className="w-2.5 h-2.5 mr-1 text-slate-400 shrink-0" />
-                                        <span className="truncate flex items-center gap-1 font-bold text-slate-800">
-                                          {honor && <span title={`${honor.shortTitle} #${leaderboardRank}`}>{honor.icon}</span>}
-                                          <span className="truncate">{b.organizer}</span>
-                                        </span>
-                                      </div>
-                                      <div className="flex items-center gap-1 shrink-0">
-                                        {departmentRank && departmentRank <= 3 && (
-                                          <TopRankHonorMascot rank={departmentRank} isUsed={displayState === 'used'} colSpan={1} />
-                                        )}
-                                        <span
-                                          title={displayState === 'waitForVerify' || displayState === 'roomInUse' || displayState === 'noCheckIn' ? checkInWindowTooltip : undefined}
-                                          className={`text-[9px] px-1.5 py-0.5 rounded font-bold border ${getBookingStatusBadgeClass(displayState, b.department, 'timeline')}`}
-                                        >
-                                          {getBookingDisplayLabel(b)}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              })}
+                                })}
+                              </div>
+                              {sortedItineraryItems.length > 2 && (
+                                <div className="pt-1.5 text-center group-hover/room-card:hidden transition-all duration-200">
+                                  <span className="inline-flex items-center gap-1 text-[9.5px] font-bold text-brand-600 bg-brand-50/90 border border-brand-200/60 px-2 py-0.5 rounded-full shadow-2xs animate-pulse">
+                                    <span>+{sortedItineraryItems.length - 2} {language === 'th' ? 'รายการ (วางเมาส์เพื่อดู)' : 'more (hover to view)'}</span>
+                                    <span className="text-[9px]">▾</span>
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
