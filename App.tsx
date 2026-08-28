@@ -1860,6 +1860,34 @@ const SmartRoomApplication: React.FC = () => {
             onNavigateBack={() => navigateToView('dashboard')}
           />
         )}
+
+        {currentView === 'admin' && (
+          <React.Suspense fallback={
+            <div className="w-full h-96 flex flex-col items-center justify-center">
+              <div className="w-8 h-8 border-3 border-brand-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+              <span className="text-slate-500 font-bold text-sm">Loading Admin Panel...</span>
+            </div>
+          }>
+            <AdminPanel
+              rooms={effectiveRooms}
+              bookings={activeBookings}
+              onDeleteBooking={handleDeleteBooking}
+              onUpdateBooking={handleUpdateBooking}
+              onApproveBooking={handleApproveBooking}
+              onRejectBooking={handleRejectBooking}
+              onVerifyBooking={handleVerifyBooking}
+              onAddRoom={handleAddRoom}
+              onUpdateRoom={handleUpdateRoom}
+              onDeleteRoom={handleDeleteRoom}
+              language={language}
+              setLanguage={setLanguage}
+              showNotification={showNotification}
+              currentUser={adminUser}
+              setCurrentUser={setAdminUser}
+              onNavigateToDashboard={() => navigateToView('dashboard')}
+            />
+          </React.Suspense>
+        )}
       </main>
 
 
