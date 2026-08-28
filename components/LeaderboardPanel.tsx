@@ -367,12 +367,12 @@ const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({
                         </p>
                       </div>
                       <div className="flex items-start gap-2 bg-white/90 border border-amber-100/90 rounded-xl p-2 shadow-2xs">
-                        <span className="text-base shrink-0 select-none">🐱</span>
+                        <span className="text-base shrink-0 select-none">🐾</span>
                         <p className="text-[10.5px] font-semibold text-slate-700 leading-snug">
                           {language === 'th' ? (
-                            <>แผนกที่มีการใช้งานห้องสูงสุด 3 อันดับแรกประจำเดือน จะได้รับ<strong className="text-amber-800 font-extrabold">น้องแมวดุ๊กดิ๊ก</strong>ไปวิ่งบนรายการจอง</>
+                            <>แผนกที่ใช้ห้องสูงสุด 3 อันดับแรกประจำเดือน จะได้รับ<strong className="text-amber-800 font-extrabold">มาสคอตดุ๊กดิ๊ก</strong>ไปวิ่งบนรายการจอง (🥇: 🐱 แมว / 🥈: 🐶 หมา / 🥉: 🐰 กระต่าย)</>
                           ) : (
-                            <>The Top 3 departments each month unlock the <strong className="text-amber-800 font-extrabold">dancing cat mascot</strong> on their bookings.</>
+                            <>The Top 3 departments unlock living <strong className="text-amber-800 font-extrabold">mascots</strong> (🥇: 🐱 Cat, 🥈: 🐶 Dog, 🥉: 🐰 Bunny) on bookings.</>
                           )}
                         </p>
                       </div>
@@ -878,13 +878,14 @@ export const InteractiveDancingCat: React.FC<{
     }, 10000);
   };
 
-  // 3D Vibrant Theme Colors & Shading:
-  // Rank 1: 🍊 3D Bright Ginger Orange Tabby + 3D Golden Crown 👑
-  // Rank 2: 🌪️ 3D Silvery Lavender/Grey Kitty
-  // Rank 3: 🍫 3D Rich Caramel Toffee Kitty
+  // 3D Vibrant Theme Colors & Shading for Mascot Trio:
+  // Rank 1: 🐱 3D Bright Ginger Orange Tabby Cat + 3D Golden Crown 👑
+  // Rank 2: 🐶 3D Joyful Honey Corgi/Shiba Dog 🥈
+  // Rank 3: 🐰 3D Fluffy Snow White Bunny Rabbit 🥉
   const theme = {
     1: {
-      name: 'น้องแมวส้ม 3D 👑 (แชมป์แผนกอันดับ 1 ประจำเดือน)',
+      species: 'cat' as const,
+      name: 'น้องแมวส้มมงกุฎทอง 🐱👑 (แชมป์แผนกอันดับ 1 ประจำเดือน)',
       danceClass: 'chibi-cat-3d-orange',
       hasCrown: true,
       id: 'orange3d',
@@ -899,42 +900,48 @@ export const InteractiveDancingCat: React.FC<{
       earPink: '#fda4af',
       cheeks: '#fb7185',
       stripes: '#9a3412',
+      badge: '👑',
     },
     2: {
-      name: 'น้องแมวเทา 3D 🥈 (แผนกอันดับ 2 ประจำเดือน)',
-      danceClass: 'chibi-cat-3d-grey',
+      species: 'dog' as const,
+      name: 'น้องหมาคอร์กี้ดุ๊กดิ๊ก 🐶🥈 (แผนกอันดับ 2 ประจำเดือน)',
+      danceClass: 'chibi-cat-3d-orange',
       hasCrown: false,
-      id: 'grey3d',
-      furLight: '#f1f5f9',
-      furMid: '#94a3b8',
-      furMain: '#64748b',
-      furShadow: '#475569',
-      furDeep: '#1e293b',
+      id: 'corgi3d',
+      furLight: '#fef3c7',
+      furMid: '#f59e0b',
+      furMain: '#d97706',
+      furShadow: '#b45309',
+      furDeep: '#78350f',
       bellyLight: '#ffffff',
-      bellyWarm: '#e2e8f0',
-      eyeIris: '#0284c7',
-      earPink: '#f9a8d4',
-      cheeks: '#f472b6',
-      stripes: '#334155',
+      bellyWarm: '#f8fafc',
+      eyeIris: '#451a03',
+      earPink: '#fed7aa',
+      cheeks: '#f43f5e',
+      stripes: '#92400e',
+      badge: '🥈',
     },
     3: {
-      name: 'น้องแมวคาราเมล 3D 🥉 (แผนกอันดับ 3 ประจำเดือน)',
-      danceClass: 'chibi-cat-3d-caramel',
+      species: 'bunny' as const,
+      name: 'น้องกระต่ายหูยาวดุ๊กดิ๊ก 🐰🥉 (แผนกอันดับ 3 ประจำเดือน)',
+      danceClass: 'chibi-cat-3d-grey',
       hasCrown: false,
-      id: 'caramel3d',
-      furLight: '#fef3c7',
-      furMid: '#d97706',
-      furMain: '#b45309',
-      furShadow: '#78350f',
-      furDeep: '#451a03',
+      id: 'bunny3d',
+      furLight: '#ffffff',
+      furMid: '#f1f5f9',
+      furMain: '#e2e8f0',
+      furShadow: '#cbd5e1',
+      furDeep: '#94a3b8',
       bellyLight: '#ffffff',
-      bellyWarm: '#fde68a',
-      eyeIris: '#b45309',
-      earPink: '#fed7aa',
-      cheeks: '#fb923c',
-      stripes: '#5c2204',
+      bellyWarm: '#fdf2f8',
+      eyeIris: '#db2777',
+      earPink: '#f472b6',
+      cheeks: '#fb7185',
+      stripes: '#cbd5e1',
+      badge: '🥉',
     },
   }[rank as 1 | 2 | 3] || {
+    species: 'cat' as const,
     name: 'น้องแมว 3D ประจำแผนก',
     danceClass: 'chibi-cat-3d-orange',
     hasCrown: false,
@@ -950,6 +957,7 @@ export const InteractiveDancingCat: React.FC<{
     earPink: '#fda4af',
     cheeks: '#fb7185',
     stripes: '#9a3412',
+    badge: '🐾',
   };
 
   return (
@@ -1005,7 +1013,7 @@ export const InteractiveDancingCat: React.FC<{
 
         {/* High-Definition 3D Vector SVG: Sleeping Loaf Pose vs Awake Standing Pose */}
         {isAsleep ? (
-          /* 🐱 3D Curled Sleeping Loaf Pose (ท่านอนหมอบหลับปุ๋ย) */
+          /* 3D Curled Sleeping Loaf Pose */
           <svg
             width="36"
             height="26"
@@ -1038,31 +1046,69 @@ export const InteractiveDancingCat: React.FC<{
               </radialGradient>
             </defs>
 
-            {/* Curled Tucked Tail */}
-            <path
-              d="M8 26C4 22 5 15 10 13C13 12 15 14 14 17C13 21 16 26 21 28"
-              stroke={theme.furShadow}
-              strokeWidth="4"
-              strokeLinecap="round"
-            />
+            {/* Tail: Cat curled / Dog wag / Bunny pom-pom */}
+            {theme.species === 'cat' && (
+              <path
+                d="M8 26C4 22 5 15 10 13C13 12 15 14 14 17C13 21 16 26 21 28"
+                stroke={theme.furShadow}
+                strokeWidth="4"
+                strokeLinecap="round"
+              />
+            )}
+            {theme.species === 'dog' && (
+              <path
+                d="M7 23C4 19 6 13 11 15C14 16 13 20 16 25"
+                stroke={theme.furShadow}
+                strokeWidth="4.5"
+                strokeLinecap="round"
+              />
+            )}
+            {theme.species === 'bunny' && (
+              <circle cx="7" cy="23" r="5" fill="#ffffff" stroke={theme.furShadow} strokeWidth="1" />
+            )}
 
             {/* 3D Curled Sleeping Loaf Body */}
             <ellipse cx="26" cy="24" rx="20" ry="12.5" fill={`url(#sleepBody-${theme.id})`} />
 
-            {/* Tabby Stripes on Back */}
-            <path d="M19 14L21 18" stroke={theme.stripes} strokeWidth="1.8" strokeLinecap="round" opacity="0.85" />
-            <path d="M25 13L26 18" stroke={theme.stripes} strokeWidth="2" strokeLinecap="round" opacity="0.85" />
-            <path d="M31 14L30 18" stroke={theme.stripes} strokeWidth="1.8" strokeLinecap="round" opacity="0.85" />
+            {/* Stripes or Fur Patterns */}
+            {theme.species === 'cat' && (
+              <>
+                <path d="M19 14L21 18" stroke={theme.stripes} strokeWidth="1.8" strokeLinecap="round" opacity="0.85" />
+                <path d="M25 13L26 18" stroke={theme.stripes} strokeWidth="2" strokeLinecap="round" opacity="0.85" />
+                <path d="M31 14L30 18" stroke={theme.stripes} strokeWidth="1.8" strokeLinecap="round" opacity="0.85" />
+              </>
+            )}
+            {theme.species === 'dog' && (
+              <ellipse cx="24" cy="24" rx="7" ry="5" fill="#ffffff" opacity="0.9" />
+            )}
 
             {/* Sleeping Head Resting Forward */}
             <circle cx="41" cy="20" r="12" fill={`url(#sleepHead-${theme.id})`} />
 
-            {/* Sleeping Ears Tilted Softly */}
-            <path d="M33 13L37 4L42 11Z" fill={`url(#sleepHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.8" />
-            <path d="M35 12L38 6.5L41 10.5Z" fill={theme.earPink} />
-
-            <path d="M46 11L51 4L54 13Z" fill={`url(#sleepHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.8" />
-            <path d="M47.5 10.5L50.5 6.5L52.5 12Z" fill={theme.earPink} />
+            {/* Ears: Cat Pointy / Dog Floppy / Bunny Long */}
+            {theme.species === 'cat' && (
+              <>
+                <path d="M33 13L37 4L42 11Z" fill={`url(#sleepHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.8" />
+                <path d="M35 12L38 6.5L41 10.5Z" fill={theme.earPink} />
+                <path d="M46 11L51 4L54 13Z" fill={`url(#sleepHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.8" />
+                <path d="M47.5 10.5L50.5 6.5L52.5 12Z" fill={theme.earPink} />
+              </>
+            )}
+            {theme.species === 'dog' && (
+              <>
+                <path d="M32 12C31 7 36 5 40 10C38 14 34 16 32 12Z" fill={`url(#sleepHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.8" />
+                <path d="M46 10C50 5 55 7 54 12C52 16 48 14 46 10Z" fill={`url(#sleepHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.8" />
+                <ellipse cx="36" cy="10" rx="2" ry="1.5" fill={theme.earPink} />
+              </>
+            )}
+            {theme.species === 'bunny' && (
+              <>
+                <path d="M36 12C32 5 22 4 19 8C20 12 28 14 35 13Z" fill={`url(#sleepHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.8" />
+                <path d="M34 11C30 7 24 6 22 9C23 11 29 12 33 11Z" fill={theme.earPink} />
+                <path d="M43 11C41 4 33 2 30 5C31 9 37 12 42 12Z" fill={`url(#sleepHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.8" />
+                <path d="M41 10C39 6 34 4 32 6C33 8 37 10 40 10Z" fill={theme.earPink} />
+              </>
+            )}
 
             {/* Head 3D Specular Highlight */}
             <ellipse cx="38" cy="14" rx="4.5" ry="2" fill="#ffffff" opacity="0.4" transform="rotate(-15 38 14)" />
@@ -1075,12 +1121,12 @@ export const InteractiveDancingCat: React.FC<{
             <circle cx="34" cy="23" r="3.5" fill={`url(#sleepCheek-${theme.id})`} />
             <circle cx="50" cy="23" r="3.5" fill={`url(#sleepCheek-${theme.id})`} />
 
-            {/* Peaceful Sleeping Eyes (u_u curved lashes) */}
+            {/* Peaceful Sleeping Eyes */}
             <path d="M34 18.5C35.5 21 38 21 39.5 18.5" stroke="#0f172a" strokeWidth="1.8" strokeLinecap="round" />
             <path d="M45 18.5C46.5 21 49 21 50.5 18.5" stroke="#0f172a" strokeWidth="1.8" strokeLinecap="round" />
 
-            {/* Pink Nose & Cute Sleeping Mouth */}
-            <path d="M42.5 22L44.5 22L43.5 23.2Z" fill="#f43f5e" />
+            {/* Nose & Cute Sleeping Mouth */}
+            <path d="M42.5 22L44.5 22L43.5 23.2Z" fill={theme.species === 'dog' ? '#0f172a' : '#f43f5e'} />
             <path
               d="M41 24.2C42 25.2 43.5 24.5 43.5 23.5C43.5 24.5 45 25.2 46 24.2"
               stroke="#0f172a"
@@ -1088,11 +1134,15 @@ export const InteractiveDancingCat: React.FC<{
               strokeLinecap="round"
             />
 
-            {/* Whiskers */}
-            <line x1="28" y1="21.5" x2="35" y2="23" stroke={theme.furShadow} strokeWidth="1" strokeLinecap="round" opacity="0.8" />
-            <line x1="28" y1="25" x2="35" y2="24.5" stroke={theme.furShadow} strokeWidth="1" strokeLinecap="round" opacity="0.8" />
-            <line x1="49" y1="23" x2="56" y2="21.5" stroke={theme.furShadow} strokeWidth="1" strokeLinecap="round" opacity="0.8" />
-            <line x1="49" y1="24.5" x2="56" y2="25" stroke={theme.furShadow} strokeWidth="1" strokeLinecap="round" opacity="0.8" />
+            {/* Whiskers (for Cat and Bunny) */}
+            {theme.species !== 'dog' && (
+              <>
+                <line x1="28" y1="21.5" x2="35" y2="23" stroke={theme.furShadow} strokeWidth="1" strokeLinecap="round" opacity="0.8" />
+                <line x1="28" y1="25" x2="35" y2="24.5" stroke={theme.furShadow} strokeWidth="1" strokeLinecap="round" opacity="0.8" />
+                <line x1="49" y1="23" x2="56" y2="21.5" stroke={theme.furShadow} strokeWidth="1" strokeLinecap="round" opacity="0.8" />
+                <line x1="49" y1="24.5" x2="56" y2="25" stroke={theme.furShadow} strokeWidth="1" strokeLinecap="round" opacity="0.8" />
+              </>
+            )}
 
             {/* Tucked Sleeping Front Paws under chin */}
             <ellipse cx="38" cy="31" rx="4" ry="2.6" fill={`url(#sleepBelly-${theme.id})`} stroke={theme.furShadow} strokeWidth="0.8" />
@@ -1102,7 +1152,7 @@ export const InteractiveDancingCat: React.FC<{
             <circle cx="47" cy="31" r="1" fill={theme.earPink} />
           </svg>
         ) : (
-          /* 🐱 3D Standing Joyful Dancing & Running Pose (ท่ายืนเต้นวิ่งเล่น) */
+          /* 3D Standing Joyful Dancing & Running Pose */
           <svg
             width="32"
             height="34"
@@ -1135,22 +1185,54 @@ export const InteractiveDancingCat: React.FC<{
               </radialGradient>
             </defs>
 
-            {/* 3D Bouncy Animated Tail */}
-            <path
-              d="M10 42C4 36 2 24 7 17C9 14 12 16 11 20C9.5 24 10 32 15 37"
-              stroke={theme.furShadow}
-              strokeWidth="4.5"
-              strokeLinecap="round"
-              className="chibi-tail-3d"
-            />
+            {/* Animated Tail: Cat / Dog / Bunny */}
+            {theme.species === 'cat' && (
+              <path
+                d="M10 42C4 36 2 24 7 17C9 14 12 16 11 20C9.5 24 10 32 15 37"
+                stroke={theme.furShadow}
+                strokeWidth="4.5"
+                strokeLinecap="round"
+                className="chibi-tail-3d"
+              />
+            )}
+            {theme.species === 'dog' && (
+              <path
+                d="M10 38C6 33 5 22 10 18C12 16 15 18 14 22C13 26 12 32 16 36"
+                stroke={theme.furShadow}
+                strokeWidth="5"
+                strokeLinecap="round"
+                className="chibi-tail-3d"
+              />
+            )}
+            {theme.species === 'bunny' && (
+              <circle cx="8" cy="38" r="6" fill="#ffffff" stroke={theme.furShadow} strokeWidth="1.2" className="chibi-tail-3d" />
+            )}
 
-            {/* Left 3D Ear */}
-            <path d="M14 18L19 7L27 16Z" fill={`url(#chibiHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="1" />
-            <path d="M16 16.5L19.5 10L24.5 15Z" fill={theme.earPink} />
-
-            {/* Right 3D Ear */}
-            <path d="M35 16L43 7L48 18Z" fill={`url(#chibiHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="1" />
-            <path d="M37.5 15L42.5 10L46 16.5Z" fill={theme.earPink} />
+            {/* Ears: Cat / Dog / Bunny */}
+            {theme.species === 'cat' && (
+              <>
+                <path d="M14 18L19 7L27 16Z" fill={`url(#chibiHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="1" />
+                <path d="M16 16.5L19.5 10L24.5 15Z" fill={theme.earPink} />
+                <path d="M35 16L43 7L48 18Z" fill={`url(#chibiHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="1" />
+                <path d="M37.5 15L42.5 10L46 16.5Z" fill={theme.earPink} />
+              </>
+            )}
+            {theme.species === 'dog' && (
+              <>
+                <path d="M13 18C11 11 17 6 23 12C20 18 16 19 13 18Z" fill={`url(#chibiHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="1" />
+                <path d="M15 16C13 12 17 9 20 13Z" fill={theme.earPink} />
+                <path d="M39 12C45 6 51 11 49 18C46 19 42 18 39 12Z" fill={`url(#chibiHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="1" />
+                <path d="M42 13C45 9 49 12 47 16Z" fill={theme.earPink} />
+              </>
+            )}
+            {theme.species === 'bunny' && (
+              <>
+                <path d="M16 20C12 8 16 -1 22 2C25 5 24 14 23 20Z" fill={`url(#chibiHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="1" />
+                <path d="M17.5 18C15 9 17 2 21 4C23 6 22 13 21 18Z" fill={theme.earPink} />
+                <path d="M39 20C38 14 37 5 40 2C46 -1 50 8 46 20Z" fill={`url(#chibiHead-${theme.id})`} stroke={theme.furShadow} strokeWidth="1" />
+                <path d="M41 18C40 13 39 6 41 4C45 2 47 9 44.5 18Z" fill={theme.earPink} />
+              </>
+            )}
 
             {/* 3D Volumetric Body */}
             <ellipse cx="31" cy="38" rx="16" ry="13.5" fill={`url(#chibiBody-${theme.id})`} />
@@ -1158,10 +1240,14 @@ export const InteractiveDancingCat: React.FC<{
             {/* 3D Chubby White Belly */}
             <ellipse cx="31" cy="39" rx="10" ry="8.5" fill={`url(#chibiBelly-${theme.id})`} />
 
-            {/* Tabby Forehead & Back Stripes */}
-            <path d="M31 8L31 12" stroke={theme.stripes} strokeWidth="2.2" strokeLinecap="round" opacity="0.9" />
-            <path d="M26 9.5L28 13" stroke={theme.stripes} strokeWidth="1.8" strokeLinecap="round" opacity="0.85" />
-            <path d="M36 9.5L34 13" stroke={theme.stripes} strokeWidth="1.8" strokeLinecap="round" opacity="0.85" />
+            {/* Cat Stripes or Dog Fur Pattern */}
+            {theme.species === 'cat' && (
+              <>
+                <path d="M31 8L31 12" stroke={theme.stripes} strokeWidth="2.2" strokeLinecap="round" opacity="0.9" />
+                <path d="M26 9.5L28 13" stroke={theme.stripes} strokeWidth="1.8" strokeLinecap="round" opacity="0.85" />
+                <path d="M36 9.5L34 13" stroke={theme.stripes} strokeWidth="1.8" strokeLinecap="round" opacity="0.85" />
+              </>
+            )}
 
             {/* 3D Volumetric Round Head */}
             <circle cx="31" cy="20" r="13.5" fill={`url(#chibiHead-${theme.id})`} />
@@ -1180,42 +1266,35 @@ export const InteractiveDancingCat: React.FC<{
             {/* Sparkling Kawaii 3D Anime Eyes */}
             {isScared ? (
               <>
-                {/* Big Surprised Eyes */}
                 <circle cx="24" cy="18" r="4" fill="#ffffff" stroke="#0f172a" strokeWidth="1.2" />
                 <circle cx="24" cy="18" r="1.8" fill="#0f172a" />
                 <circle cx="23" cy="16.8" r="0.8" fill="#ffffff" />
-
                 <circle cx="38" cy="18" r="4" fill="#ffffff" stroke="#0f172a" strokeWidth="1.2" />
                 <circle cx="38" cy="18" r="1.8" fill="#0f172a" />
                 <circle cx="37" cy="16.8" r="0.8" fill="#ffffff" />
               </>
             ) : (
               <>
-                {/* Huge Sparkly Anime Eyes with Color Iris & Catchlights */}
                 <ellipse cx="24" cy="18" rx="3.5" ry="4.2" fill="#0f172a" />
                 <ellipse cx="38" cy="18" rx="3.5" ry="4.2" fill="#0f172a" />
-
                 <ellipse cx="24" cy="19.5" rx="2.6" ry="2" fill={theme.eyeIris} opacity="0.9" />
                 <ellipse cx="38" cy="19.5" rx="2.6" ry="2" fill={theme.eyeIris} opacity="0.9" />
-
                 <circle cx="22.8" cy="16.2" r="1.5" fill="#ffffff" />
                 <circle cx="36.8" cy="16.2" r="1.5" fill="#ffffff" />
-
                 <circle cx="25.5" cy="19.5" r="0.8" fill="#ffffff" />
                 <circle cx="39.5" cy="19.5" r="0.8" fill="#ffffff" />
               </>
             )}
 
-            {/* 3D Cute Pink Nose & W-Mouth */}
-            <path d="M30 22.2L32 22.2L31 23.5Z" fill="#f43f5e" />
+            {/* Nose & Mouth */}
+            <path d="M30 22.2L32 22.2L31 23.5Z" fill={theme.species === 'dog' ? '#0f172a' : '#f43f5e'} />
             <path
-              d="M28 24.5C29.5 25.8 31 24.8 31 23.8C31 24.8 32.5 25.8 34 24.5"
+              d="M28.5 24.5C29.8 26 31 25.2 31 24.2C31 25.2 32.2 26 33.5 24.5"
               stroke="#0f172a"
               strokeWidth="1.4"
               strokeLinecap="round"
             />
 
-            {/* Cute Whiskers */}
             <line x1="14" y1="21.5" x2="22" y2="23" stroke={theme.furShadow} strokeWidth="1.2" strokeLinecap="round" opacity="0.8" />
             <line x1="14" y1="25.5" x2="22" y2="25" stroke={theme.furShadow} strokeWidth="1.2" strokeLinecap="round" opacity="0.8" />
             <line x1="40" y1="23" x2="48" y2="21.5" stroke={theme.furShadow} strokeWidth="1.2" strokeLinecap="round" opacity="0.8" />
