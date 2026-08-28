@@ -128,7 +128,7 @@
   "emailStatusQueued": "รอส่ง",
   "verifiedYes": "ยืนยันแล้ว",
   "verifiedNo": "ไม่ยืนยัน",
-  "verifiedWait": "รอผู้ใช้งานยืนยัน",
+  "verifiedWait": "รอถึงเวลาประชุม",
   "verifiedNA": "-",
   "verifiedPendingSend": "รอส่ง",
   "emailHistoryLoadFailed": "ไม่สามารถโหลดประวัติการส่งอีเมลได้",
@@ -204,7 +204,7 @@
   "hoursShort": "ชม.",
   "timesCount": "ครั้ง",
   "verified": "ยืนยันแล้ว",
-  "waitForVerify": "รอผู้ใช้งานยืนยัน",
+  "waitForVerify": "รอถึงเวลาประชุม",
   "roomInUseStatus": "กำลังใช้งานห้อง",
   "usedRoomStatus": "ใช้งานแล้ว",
   "cancelledNoVerification": "ยกเลิก / ไม่ยืนยัน",
@@ -276,8 +276,8 @@
   "ruleFurnitureDesc": "ผู้ใช้ต้องใช้ห้องตามวัตถุประสงค์ที่จอง ดูแลความสะอาด ไม่ทำให้อุปกรณ์เสียหาย และติดต่อ Admin หากต้องการยกเลิกหรือแก้ไขรายการจอง ส่วน Admin รับผิดชอบการอนุมัติ แก้ไข/ลบรายการจอง สถานะห้อง และประวัติการจอง",
   "ruleClosingTitle": "7. การดูแลห้องก่อนออก",
   "ruleClosingDesc": "ก่อนออกจากห้อง ให้ปิดแอร์และไฟตามความเหมาะสม เก็บอุปกรณ์ส่วนกลางให้เรียบร้อย รักษาความสะอาด และแจ้งผู้ดูแลระบบหากพบปัญหาเกี่ยวกับห้องหรืออุปกรณ์",
-  "unverifiedSentEmails": "ส่งแล้ว - รอผู้ใช้งานยืนยัน",
-  "filterUnverifiedSent": "ส่งแล้ว (ยังไม่ยืนยัน)",
+  "unverifiedSentEmails": "ส่งแล้ว - รอถึงเวลาประชุม",
+  "filterUnverifiedSent": "ส่งแล้ว (รอถึงเวลาประชุม)",
   "verifyAsAdmin": "ยืนยันแทนผู้ใช้",
   "resendEmailBtn": "ส่งอีเมลซ้ำ"
 }

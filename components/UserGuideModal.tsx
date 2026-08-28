@@ -172,7 +172,7 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ language, rooms,
               </div>
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 sm:p-4 flex items-start space-x-3">
                 <MailCheck className="w-5 h-5 text-emerald-600 mt-0.5 flex-shrink-0" />
-                <p className="text-xs font-semibold text-emerald-800 leading-relaxed">{language === 'th' ? 'รายการที่รอยืนยันควรใช้สถานะรอผู้ใช้งานยืนยัน เพื่อให้ผู้ใช้เข้าใจว่าต้องยืนยันผ่านอีเมล/เช็คอิน' : 'Bookings waiting for verification should display Wait for Verify so users know email/check-in verification is still required.'}</p>
+                <p className="text-xs font-semibold text-emerald-800 leading-relaxed">{language === 'th' ? 'การจองทุกรายการได้รับการยืนยันทันที พร้อมมีสถานะ "รอถึงเวลาประชุม" (Upcoming) และระบบจะส่งอีเมลแจ้งเตือนล่วงหน้า 15 นาทีให้อัตโนมัติ' : 'All bookings are confirmed instantly with "Upcoming" status, and the system automatically sends a reminder email 15 minutes before the meeting.'}</p>
               </div>
             </div>
           )}

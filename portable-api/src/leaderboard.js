@@ -13,6 +13,10 @@ function cleanDisplayName(value) {
   return typeof value === 'string' ? value.trim().slice(0, 200) : '';
 }
 
+const EXCLUDED_LEADERBOARD_EMAILS = new Set([
+  'usani.chansod@yageo.com',
+]);
+
 function leaderboardScoresQuery() {
   // DATEDIFF is supported by the SQL Server versions used by the on-prem API.
   // Room bookings are short-lived, so minute totals cannot approach its range.
@@ -23,6 +27,7 @@ function leaderboardScoresQuery() {
       FROM dbo.Bookings
       WHERE Status = N'VERIFIED'
         AND ActualStartTime IS NOT NULL
+        AND LOWER(LTRIM(RTRIM(Email))) NOT IN ('usani.chansod@yageo.com')
         AND StartTime >= @periodStart
         AND EndTime < @periodEnd
         AND EndTime <= @now
@@ -46,6 +51,7 @@ function leaderboardScoresQuery() {
 
 function rankedLeaderboardRows(rows) {
   const sorted = [...rows]
+    .filter((row) => !EXCLUDED_LEADERBOARD_EMAILS.has(String(row.EmailKey || '').trim().toLowerCase()))
     .map((row) => ({
       emailKey: typeof row.EmailKey === 'string' ? row.EmailKey : '',
       displayName: cleanDisplayName(row.EmailDisplayName) || 'Room user',
@@ -65,4 +71,4 @@ function leaderboardEntries(rows) {
   return rankedLeaderboardRows(rows).map(({ emailKey, ...entry }) => entry);
 }
 
-module.exports = { currentBangkokMonth, leaderboardEntries, rankedLeaderboardRows, leaderboardScoresQuery };
+module.exports = { currentBangkokMonth, leaderboardEntries, rankedLeaderboardRows, leaderboardScoresQuery, EXCLUDED_LEADERBOARD_EMAILS };

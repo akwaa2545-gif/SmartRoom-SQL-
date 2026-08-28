@@ -129,7 +129,7 @@
   "emailStatusQueued": "Waiting to send",
   "verifiedYes": "Verified",
   "verifiedNo": "Not verified",
-  "verifiedWait": "Wait for Verify",
+  "verifiedWait": "Upcoming",
   "verifiedNA": "-",
   "verifiedPendingSend": "Waiting to send",
   "emailHistoryLoadFailed": "Could not load email sent history.",
@@ -205,7 +205,7 @@
   "hoursShort": "hrs",
   "timesCount": "Bookings",
   "verified": "Verified",
-  "waitForVerify": "Wait for Verify",
+  "waitForVerify": "Upcoming",
   "roomInUseStatus": "Room In Use",
   "usedRoomStatus": "Used",
   "cancelledNoVerification": "Cancelled / No verification",
@@ -277,8 +277,8 @@
   "ruleFurnitureDesc": "Users must use the room only for the booked purpose, keep the room clean, avoid damage, and contact Admin for cancellations or changes. Admins manage approvals, booking edits/deletions, room status, maintenance periods, and booking history.",
   "ruleClosingTitle": "7. Departure and Room Care",
   "ruleClosingDesc": "Before leaving, turn off the AC and lights where appropriate, return shared equipment to its proper place, leave the room clean, and report any room or equipment issue to Admin.",
-  "unverifiedSentEmails": "Sent Emails - User Not Verified",
-  "filterUnverifiedSent": "Sent (Unverified)",
+  "unverifiedSentEmails": "Sent - Upcoming",
+  "filterUnverifiedSent": "Sent (Upcoming)",
   "verifyAsAdmin": "Verify as Admin",
   "resendEmailBtn": "Resend Email"
 }

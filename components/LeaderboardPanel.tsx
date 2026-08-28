@@ -355,8 +355,18 @@ const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({
                       return (
                         <div
                           key={`${user.rank}-${user.name}`}
-                          className={`pt-2.5 first:pt-0 flex items-center justify-between gap-3 p-2 rounded-2xl transition-all hover:bg-slate-50 ${
-                            user.rank <= 3 ? 'bg-amber-50/30' : ''
+                          className={`pt-2.5 first:pt-0 flex items-center justify-between gap-3 p-2.5 rounded-2xl transition-all hover:bg-slate-50 ${
+                            user.rank === 1
+                              ? 'bg-amber-50/60 border border-amber-200/80 shadow-xs'
+                              : user.rank === 2
+                                ? 'bg-slate-50/80 border border-slate-200/80 shadow-xs'
+                                : user.rank === 3
+                                  ? 'bg-orange-50/50 border border-orange-200/70 shadow-xs'
+                                  : user.rank === 4
+                                    ? 'bg-teal-50/40 border border-teal-200/50 shadow-xs'
+                                    : user.rank === 5
+                                      ? 'bg-indigo-50/40 border border-indigo-200/50 shadow-xs'
+                                      : ''
                           }`}
                         >
                           <div className="flex items-center gap-3 min-w-0">
@@ -367,19 +377,19 @@ const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({
                             </div>
 
                             <div className="min-w-0">
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <span className="font-extrabold text-slate-900 text-xs truncate">
                                   {user.name}
                                 </span>
                                 {honor && (
-                                  <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${honor.badgeClass}`}>
+                                  <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[9px] font-black tracking-tight ${honor.badgeClass}`}>
                                     <span>{honor.icon}</span>
                                     <span>{honor.shortTitle}</span>
                                   </span>
                                 )}
                               </div>
                               {user.department && (
-                                <span className={`inline-block mt-0.5 text-[10px] font-bold px-1.5 py-0.2 rounded border ${getBookingDepartmentBadgeClass(user.department)}`}>
+                                <span className={`inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-md border ${getBookingDepartmentBadgeClass(user.department)}`}>
                                   {formatDepartment(user.department)}
                                 </span>
                               )}
@@ -682,7 +692,9 @@ export const InteractiveDancingCat: React.FC<{
   rank: number;
   isUsed?: boolean;
   className?: string;
-}> = ({ rank, isUsed = false, className = '' }) => {
+  colSpan?: number;
+  maxRunDistance?: number;
+}> = ({ rank, isUsed = false, className = '', colSpan = 1, maxRunDistance }) => {
   if (!rank || rank > 3) return null;
 
   // Cat starts sleeping by default!
@@ -695,6 +707,21 @@ export const InteractiveDancingCat: React.FC<{
 
   const sleepTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Calculate safe travel distance based on booking duration (colSpan) to prevent overflowing card frame
+  const maxDist = maxRunDistance !== undefined
+    ? Math.max(0, maxRunDistance)
+    : colSpan <= 1
+      ? 20 // 1 hour booking: very safe, stays within card
+      : colSpan === 2
+        ? 65 // 2 hour booking
+        : 120; // 3+ hour booking
+
+  const patrolWaypoints = useMemo(() => {
+    if (maxDist <= 0) return [0];
+    const baseRatios = [-0.25, -0.75, -0.4, -0.95, 0, -0.6, -0.15];
+    return baseRatios.map((r) => Math.round(r * maxDist));
+  }, [maxDist]);
+
   // If room is used -> cat sleeps forever
   useEffect(() => {
     if (isUsed) {
@@ -706,10 +733,9 @@ export const InteractiveDancingCat: React.FC<{
 
   // When awake: active continuous running & playful 3D dancing loop
   useEffect(() => {
-    if (isAsleep || isUsed) return;
+    if (isAsleep || isUsed || patrolWaypoints.length <= 1) return;
 
     let moveTimer: NodeJS.Timeout;
-    const patrolWaypoints = [-40, -110, -65, -135, 0, -85, -20];
     let stepIndex = 0;
 
     const runCycle = () => {
@@ -736,7 +762,7 @@ export const InteractiveDancingCat: React.FC<{
     moveTimer = setTimeout(runCycle, 600);
 
     return () => clearTimeout(moveTimer);
-  }, [isAsleep, isUsed, offsetX]);
+  }, [isAsleep, isUsed, offsetX, patrolWaypoints]);
 
   // When user hovers / touches with mouse -> wake up or startle escape!
   const handlePointerEnter = (e: React.MouseEvent) => {
@@ -756,8 +782,8 @@ export const InteractiveDancingCat: React.FC<{
       setIsRunning(true);
       setBubble('⚡');
 
-      // Wake up dash
-      const targetX = -70;
+      // Wake up dash (scaled safely to avoid running out of bounds)
+      const targetX = Math.round(-0.5 * maxDist);
       setFacingLeft(true);
       setOffsetX(targetX);
 
@@ -781,12 +807,14 @@ export const InteractiveDancingCat: React.FC<{
       return;
     }
 
-    // If already awake -> evade mouse and extend awake timer by 10s!
-    const escapeSpots = [-140, -100, -50, -120, 0];
-    const farSpots = escapeSpots.filter((s) => Math.abs(s - offsetX) > 40);
+    // If already awake -> evade mouse safely within bounds and extend awake timer by 10s!
+    const escapeRatios = [-0.95, -0.65, -0.35, -0.85, 0];
+    const escapeSpots = escapeRatios.map((r) => Math.round(r * maxDist));
+    const minDiff = Math.max(5, Math.round(maxDist * 0.25));
+    const farSpots = escapeSpots.filter((s) => Math.abs(s - offsetX) >= minDiff);
     const targetX = farSpots.length > 0
       ? farSpots[Math.floor(Math.random() * farSpots.length)]
-      : (offsetX < -60 ? 0 : -130);
+      : (offsetX < -Math.round(maxDist * 0.4) ? 0 : -Math.round(maxDist * 0.8));
 
     setFacingLeft(targetX < offsetX);
     setOffsetX(targetX);

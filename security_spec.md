@@ -23,73 +23,97 @@
 The following payloads represent malicious requests designed to exploit security updates, ID poisoning, or invalid status/type boundaries.
 
 ### Payload 1: ID Poisoning on Booking ID
-*Attempt to insert an extremely long 1.5KB junk string as the booking ID.*
+
+_Attempt to insert an extremely long 1.5KB junk string as the booking ID._
+
 - **ID target**: `j89a#$@*...[1.5KB long string]...`
 - **Rule Defense**: Closed by `isValidId()` which checks `.size() <= 128` and enforces safe character regex.
 - **Expected Outcome**: `PERMISSION_DENIED`
 
 ### Payload 2: Admin Privilege Escalation through Self-Assigned Roles
-*A normal user attempts to save their user profile with a self-assigned admin role.*
+
+_A normal user attempts to save their user profile with a self-assigned admin role._
+
 - **Payload**: `{ "username": "attacker", "role": "SUPER_ADMIN", "password": "123" }`
 - **Rule Defense**: Admin profile writes restricted to existing authenticated Super Admin accounts.
 - **Expected Outcome**: `PERMISSION_DENIED`
 
 ### Payload 3: Orphaned Booking creation
-*Creating a Room Booking referencing a non-existent Room ID.*
+
+_Creating a Room Booking referencing a non-existent Room ID._
+
 - **Payload**: `{ "id": "b_orph", "roomId": "non-existent-room-id", "title": "Phantom Meeting", "organizer": "Vilas", ... }`
 - **Rule Defense**: Verified using `exists(/databases/$(database)/documents/rooms/$(incoming().roomId))` on create.
 - **Expected Outcome**: `PERMISSION_DENIED`
 
 ### Payload 4: Booking Status bypass during Guest creation
-*A non-admin guest attempts to directly create a booking with `CONFIRMED` status without going through a pending state.*
+
+_A non-admin guest attempts to directly create a booking with `CONFIRMED` status without going through a pending state._
+
 - **Payload**: `{ "id": "b4", "roomId": "m1", "title": "Bypass Sync", "status": "CONFIRMED" }`
 - **Rule Defense**: When creating client-side without auth, only `PENDING` bookings or verified fields can be handled if standard approval flow is applied.
 - **Expected Outcome**: `PERMISSION_DENIED`
 
 ### Payload 5: Infinite Time-Travel Booking
-*Booking with an end date/time before the start date/time.*
+
+_Booking with an end date/time before the start date/time._
+
 - **Payload**: `{ "startTime": "2026-06-12T10:00:00Z", "endTime": "2026-06-11T10:00:00Z" }`
 - **Rule Defense**: `isValidBooking()` validation helper asserts `incoming().endTime > incoming().startTime`.
 - **Expected Outcome**: `PERMISSION_DENIED`
 
 ### Payload 6: Key Injecting Ghost Field (Anti-Update-Gap)
-*Attempt to update a reservation with a shadow property `isVipApproval` to bypass business logic.*
+
+_Attempt to update a reservation with a shadow property `isVipApproval` to bypass business logic._
+
 - **Payload**: `{ "roomId": "m1", "isVipApproval": true }`
 - **Rule Defense**: `affectedKeys().hasOnly()` limits allowed keys on update.
 - **Expected Outcome**: `PERMISSION_DENIED`
 
 ### Payload 7: Denial of Wallet via Giant Room Capacity
-*Injection of negative capacity or billion seats capacity to exhaust processing memory.*
+
+_Injection of negative capacity or billion seats capacity to exhaust processing memory._
+
 - **Payload**: `{ "id": "r99", "name": "Mega Room", "capacity": 9999999999 }`
 - **Rule Defense**: `isValidRoom()` helper asserts `capacity` boundaries.
 - **Expected Outcome**: `PERMISSION_DENIED`
 
 ### Payload 8: Immutable Field Lockout bypass
-*Attempt to re-route a booking by changing its immutable `roomId` after it is created.*
+
+_Attempt to re-route a booking by changing its immutable `roomId` after it is created._
+
 - **Payload**: `{ "roomId": "m2" }`
 - **Rule Defense**: Asserting `incoming().roomId == existing().roomId` in the edit pattern.
 - **Expected Outcome**: `PERMISSION_DENIED`
 
 ### Payload 9: Empty/Large Array injection in Amenities
-*Attempting to write an oversized array to crash the Room detail loader.*
+
+_Attempting to write an oversized array to crash the Room detail loader._
+
 - **Payload**: `{ "amenities": [ "A", "B", ... 100 times ] }`
 - **Rule Defense**: Constraints array size via `incoming().amenities.size() <= 15`.
 - **Expected Outcome**: `PERMISSION_DENIED`
 
 ### Payload 10: Unauthorized Deletion of Room
-*An unauthenticated user attempts to delete a room.*
+
+_An unauthenticated user attempts to delete a room._
+
 - **Target**: Delete `/rooms/m1`
 - **Rule Defense**: Restricted delete permission to Super Admins.
 - **Expected Outcome**: `PERMISSION_DENIED`
 
 ### Payload 11: Modifying Terminal-State Bookings
-*Trying to alter details of an already rejected booking.*
+
+_Trying to alter details of an already rejected booking._
+
 - **Payload**: `{ "title": "Change after Reject" }`
 - **Rule Defense**: Terminal state locking on `status` changes.
 - **Expected Outcome**: `PERMISSION_DENIED`
 
 ### Payload 12: Auth claims validation abuse
-*Attempt to bypass credentials utilizing client-side custom auth claims.*
+
+_Attempt to bypass credentials utilizing client-side custom auth claims._
+
 - **Payload**: Emulated admin custom token.
 - **Rule Defense**: We fetch values directly from trusted DB path (/admins/$(request.auth.uid)) instead of trusting custom token claims.
 - **Expected Outcome**: `PERMISSION_DENIED`
@@ -102,27 +126,37 @@ Below is a mock test runner blueprint matching the specification layout for loca
 
 ```typescript
 // firestore.rules.test.ts
-import { assertFails, assertSucceeds, initializeTestEnvironment } from '@firebase/rules-unit-testing';
+import {
+  assertFails,
+  assertSucceeds,
+  initializeTestEnvironment,
+} from "@firebase/rules-unit-testing";
 
 describe("TOKIN Smart Room Fortress Rules", () => {
   let testEnv;
   beforeAll(async () => {
-    testEnv = await initializeTestEnvironment({ projectId: "sutsmartbus-495306" });
+    testEnv = await initializeTestEnvironment({
+      projectId: "sutsmartbus-495306",
+    });
   });
 
   it("fails to write rooms for unauthenticated users", async () => {
     const unauthedDb = testEnv.unauthenticatedContext().firestore();
-    await assertFails(unauthedDb.collection("rooms").doc("m1").set({ name: "Attack!" }));
+    await assertFails(
+      unauthedDb.collection("rooms").doc("m1").set({ name: "Attack!" }),
+    );
   });
 
   it("blocks booking creations with invalid end dates", async () => {
     const unauthedDb = testEnv.unauthenticatedContext().firestore();
-    await assertFails(unauthedDb.collection("bookings").doc("b-bad").set({
-      id: "b-bad",
-      roomId: "m1",
-      startTime: "2026-06-12T12:00:00Z",
-      endTime: "2026-06-12T10:00:00Z"
-    }));
+    await assertFails(
+      unauthedDb.collection("bookings").doc("b-bad").set({
+        id: "b-bad",
+        roomId: "m1",
+        startTime: "2026-06-12T12:00:00Z",
+        endTime: "2026-06-12T10:00:00Z",
+      }),
+    );
   });
 });
 ```

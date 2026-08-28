@@ -246,15 +246,16 @@ const Dashboard: React.FC<DashboardProps> = ({
     if (leaderboardRanks.has(booking.id)) {
       return leaderboardRanks.get(booking.id);
     }
-    const organizerKey = (booking.organizer || booking.emailDisplayName || '').trim().toLowerCase();
-    if (organizerKey && organizerLeaderboardRankMap.has(organizerKey)) {
-      return organizerLeaderboardRankMap.get(organizerKey);
+    // Check by unique email first to prevent duplicate name collisions
+    if (booking.email && organizerLeaderboardRankMap.has(booking.email.trim().toLowerCase())) {
+      return organizerLeaderboardRankMap.get(booking.email.trim().toLowerCase());
     }
     if (booking.employeeId && organizerLeaderboardRankMap.has(booking.employeeId.trim().toLowerCase())) {
       return organizerLeaderboardRankMap.get(booking.employeeId.trim().toLowerCase());
     }
-    if (booking.email && organizerLeaderboardRankMap.has(booking.email.trim().toLowerCase())) {
-      return organizerLeaderboardRankMap.get(booking.email.trim().toLowerCase());
+    const organizerKey = (booking.organizer || booking.emailDisplayName || '').trim().toLowerCase();
+    if (organizerKey && organizerLeaderboardRankMap.has(organizerKey)) {
+      return organizerLeaderboardRankMap.get(organizerKey);
     }
     return undefined;
   };
@@ -1331,7 +1332,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                                       </div>
                                       <div className="flex items-center gap-1 shrink-0">
                                         {departmentRank && departmentRank <= 3 && (
-                                          <TopRankHonorMascot rank={departmentRank} isUsed={displayState === 'used'} />
+                                          <TopRankHonorMascot rank={departmentRank} isUsed={displayState === 'used'} colSpan={1} />
                                         )}
                                         <span
                                           title={displayState === 'waitForVerify' || displayState === 'roomInUse' || displayState === 'noCheckIn' ? checkInWindowTooltip : undefined}
@@ -1475,7 +1476,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                                             {getBookingDisplayLabel(booking)}
                                           </span>
                                           {departmentRank && departmentRank <= 3 && (
-                                            <TopRankHonorMascot rank={departmentRank} isUsed={displayState === 'used'} />
+                                            <TopRankHonorMascot rank={departmentRank} isUsed={displayState === 'used'} colSpan={colSpan} />
                                           )}
                                         </div>
                                         <div className="truncate text-[9.5px] text-slate-800 font-bold w-full bg-white/70 px-1.5 py-0.5 rounded border border-white/80 flex items-center">
@@ -1840,7 +1841,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                             </span>
                             <div className="flex shrink-0 items-center gap-1.5">
                               {departmentRank && departmentRank <= 3 && (
-                                <TopRankHonorMascot rank={departmentRank} isUsed={displayState === 'used'} />
+                                <TopRankHonorMascot rank={departmentRank} isUsed={displayState === 'used'} colSpan={2} />
                               )}
                               <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold border shadow-xs ${getBookingStatusBadgeClass(displayState, b.department)}`}>
                                 {getBookingDisplayLabel(b)}

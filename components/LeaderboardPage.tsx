@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Crown, Trophy, Medal, Sparkles, Building2, Users, Calendar, ArrowLeft, TrendingUp, Search, Clock, CheckCircle2, Award, BarChart3, Filter } from 'lucide-react';
 import { Booking, Room } from '../types';
 import { getPortableLeaderboard, isPortableMailApiEnabled, PortableLeaderboard } from '../utils/portableMailApi';
-import { calculateLeaderboardStats, formatDurationHours, LeaderboardPeriod } from '../utils/leaderboardStats';
+import { calculateLeaderboardStats, formatDurationHours, LeaderboardPeriod, getLeaderboardHonorInfo } from '../utils/leaderboardStats';
 import { formatDepartment } from '../translations';
 import { getBookingDepartmentBadgeClass } from '../bookingVisualStyles';
 import { DEPARTMENTS } from '../constants';
@@ -280,7 +280,11 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
                 <h3 className="font-black text-slate-900 text-sm truncate max-w-full" title={topThree[1].name}>
                   {topThree[1].name}
                 </h3>
-                <span className={`mt-1 inline-block max-w-full truncate rounded-md px-2 py-0.5 text-[10px] font-bold ${getBookingDepartmentBadgeClass(topThree[1].department)}`}>
+                <span className="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-black tracking-tight !bg-gradient-to-r !from-slate-400 !via-slate-200 !to-slate-400 !text-slate-900 !border-slate-300 shadow-sm mt-1">
+                  <span>🥈</span>
+                  <span>Master of Meeting</span>
+                </span>
+                <span className={`mt-1.5 inline-block max-w-full truncate rounded-md px-2 py-0.5 text-[10px] font-bold ${getBookingDepartmentBadgeClass(topThree[1].department)}`}>
                   {formatDepartment(topThree[1].department, language)}
                 </span>
                 <p className="mt-3 text-base font-black text-slate-800">
@@ -312,6 +316,10 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
                 <h3 className="font-black text-slate-950 text-base truncate max-w-full" title={topThree[0].name}>
                   {topThree[0].name}
                 </h3>
+                <span className="inline-flex items-center gap-1 rounded-full border px-3 py-0.5 text-xs font-black tracking-tight !bg-gradient-to-r !from-amber-500 !via-yellow-400 !to-amber-500 !text-slate-950 !border-amber-300 shadow-md shadow-amber-500/30 mt-1.5 animate-pulse">
+                  <span>👑</span>
+                  <span>King of Meeting</span>
+                </span>
                 <span className={`mt-1.5 inline-block max-w-full truncate rounded-md px-2.5 py-0.5 text-xs font-black ${getBookingDepartmentBadgeClass(topThree[0].department)}`}>
                   {formatDepartment(topThree[0].department, language)}
                 </span>
@@ -338,7 +346,11 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
                 <h3 className="font-black text-slate-900 text-sm truncate max-w-full" title={topThree[2].name}>
                   {topThree[2].name}
                 </h3>
-                <span className={`mt-1 inline-block max-w-full truncate rounded-md px-2 py-0.5 text-[10px] font-bold ${getBookingDepartmentBadgeClass(topThree[2].department)}`}>
+                <span className="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-black tracking-tight !bg-gradient-to-r !from-amber-700 !via-orange-500 !to-amber-600 !text-white !border-orange-300 shadow-sm mt-1">
+                  <span>🥉</span>
+                  <span>Champion of Meeting</span>
+                </span>
+                <span className={`mt-1.5 inline-block max-w-full truncate rounded-md px-2 py-0.5 text-[10px] font-bold ${getBookingDepartmentBadgeClass(topThree[2].department)}`}>
                   {formatDepartment(topThree[2].department, language)}
                 </span>
                 <p className="mt-3 text-base font-black text-orange-800">
@@ -452,6 +464,7 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs">
                   {topTwentyUsers.map((user) => {
+                    const honor = getLeaderboardHonorInfo(user.rank, language);
                     const maxMinutes = topTwentyUsers[0]?.totalMinutes || 1;
                     const barPercent = Math.max(5, Math.round((user.totalMinutes / maxMinutes) * 100));
 
@@ -471,7 +484,15 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
                               {getInitials(user.name)}
                             </div>
                             <div className="min-w-0">
-                              <p className="font-black text-slate-900 truncate">{user.name}</p>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="font-black text-slate-900 truncate">{user.name}</p>
+                                {honor && (
+                                  <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-black tracking-tight ${honor.badgeClass}`}>
+                                    <span>{honor.icon}</span>
+                                    <span>{honor.shortTitle}</span>
+                                  </span>
+                                )}
+                              </div>
                               <div className="flex items-center gap-1.5 mt-0.5">
                                 <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-md ${getBookingDepartmentBadgeClass(user.department)}`}>
                                   {formatDepartment(user.department, language)}
