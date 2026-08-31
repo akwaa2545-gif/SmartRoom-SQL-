@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Announcement, AnnouncementAudience, AnnouncementCategory, Booking, Room, RoomType, BookingStatus, AdminUser, AdminRole, EmailSentHistoryRecord, EmailSentStatus } from '../types';
 import { INITIAL_ADMIN_USERS, DEPARTMENTS, BOOKING_START_HOUR, BOOKING_END_HOUR } from '../constants';
 import { Lock, Trash2, Search, Calendar, User, Clock, LayoutGrid, Edit, Plus, X, Save, Building2, IdCard, Check, XCircle, Shield, ShieldCheck, UserCog, LogIn, Upload, FileText, Flame, Sparkles, TrendingUp, Users, AlertCircle, BarChart2, Mail, RefreshCw, Download, BookOpen, Wrench, Send, Megaphone, Eye, Info, AlertTriangle, CheckCircle2, Bell } from 'lucide-react';
-import { TRANSLATIONS, formatDate, formatTimeRange, translateText, translateAmenities, formatTimeValue, isRoomCurrentlyClosed, formatDepartment, getDepartmentSelectOptions } from '../translations';
+import { TRANSLATIONS, formatDate, formatTimeRange, formatTimeString, translateText, translateAmenities, formatTimeValue, isRoomCurrentlyClosed, formatDepartment, getDepartmentSelectOptions } from '../translations';
 import ConfirmationModal from './ConfirmationModal';
 import { collection, onSnapshot, setDoc, doc } from 'firebase/firestore';
 import { signInAnonymously } from 'firebase/auth';
@@ -1034,9 +1034,33 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     };
   }, [analyticsBookingsForDate, rooms, language]);
 
-  const filteredBookings = todayBookings
+  const getBookingSubmittedAt = (booking: Booking): Date | null => {
+    const value = booking.createdAt as any;
+    if (!value) return null;
+    const date = value instanceof Date
+      ? value
+      : typeof value.toDate === 'function'
+        ? value.toDate()
+        : new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  };
+
+  const getBookingTransactionTime = (booking: Booking) =>
+    getBookingSubmittedAt(booking)?.getTime() ?? booking.startTime.getTime();
+
+  const formatBookingSubmittedTime = (booking: Booking) => {
+    const date = getBookingSubmittedAt(booking);
+    if (!date) return '-';
+    return formatTimeString(
+      `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`,
+      language,
+    );
+  };
+
+  // Admin transaction list: retain every booking record and show the newest submission first.
+  const filteredBookings = bookings
     .filter(bookingMatchesSearch)
-    .sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+    .sort((a, b) => getBookingTransactionTime(b) - getBookingTransactionTime(a));
 
   const weekStartsOnSunday = (date: Date) => {
     const start = new Date(date);
@@ -1241,25 +1265,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     return true;
   };
 
-  const getBookingHistorySortBucket = (booking: Booking) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const bookingDay = new Date(booking.startTime);
-    bookingDay.setHours(0, 0, 0, 0);
-    if (bookingDay.getTime() === today.getTime()) return 0;
-    if (bookingDay.getTime() > today.getTime()) return 1;
-    return 2;
-  };
-
   const bookingHistory = bookings
     .filter(bookingMatchesSearch)
     .filter(bookingMatchesHistoryDateFilter)
-    .sort((a, b) => {
-      const bucketDiff = getBookingHistorySortBucket(a) - getBookingHistorySortBucket(b);
-      if (bucketDiff !== 0) return bucketDiff;
-      const bucket = getBookingHistorySortBucket(a);
-      return bucket === 2 ? b.startTime.getTime() - a.startTime.getTime() : a.startTime.getTime() - b.startTime.getTime();
-    });
+    .sort((a, b) => getBookingTransactionTime(b) - getBookingTransactionTime(a));
 
   const formatCsvDateTime = (date?: Date) => {
     if (!date) return '';
@@ -1285,6 +1294,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       'Employee ID',
       'Department',
       'Email',
+      'Booked At',
       'Start Time',
       'End Time',
       'Status',
@@ -1301,6 +1311,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       booking.employeeId,
       formatDepartment(booking.department),
       booking.email || '',
+      formatCsvDateTime(getBookingSubmittedAt(booking) || undefined),
       formatCsvDateTime(booking.startTime),
       formatCsvDateTime(booking.endTime),
       getAdminBookingStatusLabel(booking),
@@ -2110,6 +2121,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       {/* Tabs */}
       <div className="flex space-x-1 bg-white p-1 rounded-xl border border-slate-200 w-fit overflow-x-auto">
         <button
+          onClick={() => setActiveTab('bookings')}
+          className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center whitespace-nowrap ${activeTab === 'bookings' ? 'bg-brand-50 text-brand-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}
+        >
+          <Calendar className="w-4 h-4 mr-2" />
+          {language === 'th' ? 'รายการจอง' : 'Booking Transactions'}
+        </button>
+
+        <button
           onClick={() => setActiveTab('analytics')}
           className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center whitespace-nowrap ${activeTab === 'analytics' ? 'bg-brand-50 text-brand-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}
         >
@@ -2195,10 +2214,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
           </div>
 
-          {/* Booking Management Table */}
+          {/* Booking transaction table */}
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-4">
-              <h2 className="font-bold text-slate-800">{language === 'th' ? 'รายการจองวันนี้' : 'Today Bookings'}</h2>
+              <div>
+                <h2 className="font-bold text-slate-800">{language === 'th' ? 'รายการจองทั้งหมด' : 'Booking Transactions'}</h2>
+                <p className="mt-1 text-xs font-medium text-slate-500">
+                  {language === 'th' ? 'เรียงตามวันและเวลาที่จอง จากใหม่ไปเก่า' : 'All bookings, ordered by booking date and time (newest first).'}
+                </p>
+              </div>
               <div className="relative w-full sm:w-64">
                 <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
                 <input
@@ -2217,6 +2241,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                   <tr>
                     <th className="px-6 py-3">{t.room}</th>
                     <th className="px-6 py-3">{t.dateTimeCol}</th>
+                    <th className="px-6 py-3">{language === 'th' ? 'เวลาที่จอง' : 'Booked At'}</th>
                     <th className="px-6 py-3">{t.eventCol}</th>
                     <th className="px-6 py-3">{t.userCol}</th>
                     <th className="px-6 py-3">{t.status}</th>
@@ -2226,7 +2251,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                 <tbody className="divide-y divide-slate-100 font-medium">
                   {filteredBookings.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-6 py-8 text-center text-slate-500 italic">
+                      <td colSpan={7} className="px-6 py-8 text-center text-slate-500 italic">
                         {t.noBookingsTable}
                       </td>
                     </tr>
@@ -2247,6 +2272,20 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                             <div className="text-slate-500 text-xs font-semibold font-mono mt-0.5">
                               {formatTimeRange(booking.startTime, booking.endTime, language)}
                             </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            {getBookingSubmittedAt(booking) ? (
+                              <>
+                                <div className="font-semibold text-slate-900">
+                                  {formatDate(getBookingSubmittedAt(booking)!, language, { weekday: undefined, month: 'short', day: 'numeric', year: 'numeric' })}
+                                </div>
+                                <div className="text-slate-500 text-xs font-semibold font-mono mt-0.5">
+                                  {formatBookingSubmittedTime(booking)}
+                                </div>
+                              </>
+                            ) : (
+                              <span className="text-slate-400">-</span>
+                            )}
                           </td>
                           <td className="px-6 py-4 font-semibold text-slate-800">{translateText(booking.title, language)}</td>
                           <td className="px-6 py-4 text-slate-500">
@@ -2496,12 +2535,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
             </div>
             <div className="overflow-x-auto max-h-[520px]">
-              <table className="w-full min-w-[1120px] table-fixed text-left text-sm">
+              <table className="w-full min-w-[1280px] table-fixed text-left text-sm">
                 <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50/95 text-[11px] font-bold uppercase tracking-wider text-slate-500 backdrop-blur">
                   <tr>
                     <th className="w-[150px] px-5 py-3">{t.room}</th>
                     <th className="px-5 py-3">{t.eventCol}</th>
                     <th className="w-[170px] px-5 py-3">{t.dateTimeCol}</th>
+                    <th className="w-[170px] px-5 py-3">{language === 'th' ? 'เวลาที่จอง' : 'Booked At'}</th>
                     <th className="w-[170px] px-5 py-3">{t.organizerName}</th>
                     <th className="w-[135px] px-5 py-3">{t.employeeId}</th>
                     <th className="w-[110px] px-5 py-3">{t.department}</th>
@@ -2513,7 +2553,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                 <tbody className="divide-y divide-slate-100 bg-white font-medium">
                   {bookingHistory.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-6 py-10 text-center text-sm font-semibold text-slate-400">{t.noBookingsTable}</td>
+                      <td colSpan={10} className="px-6 py-10 text-center text-sm font-semibold text-slate-400">{t.noBookingsTable}</td>
                     </tr>
                   ) : bookingHistory.map(booking => {
                     const displayState = getAdminBookingDisplayState(booking);
@@ -2530,6 +2570,16 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                         <td className="px-5 py-4 align-top">
                           <div className="font-bold text-slate-900">{formatDate(booking.startTime, language, { weekday: undefined, month: 'short', day: 'numeric', year: 'numeric' })}</div>
                           <div className="mt-1 font-mono text-xs font-semibold text-slate-500">{formatTimeRange(booking.startTime, booking.endTime, language)}</div>
+                        </td>
+                        <td className="px-5 py-4 align-top">
+                          {getBookingSubmittedAt(booking) ? (
+                            <>
+                              <div className="font-bold text-slate-900">{formatDate(getBookingSubmittedAt(booking)!, language, { weekday: undefined, month: 'short', day: 'numeric', year: 'numeric' })}</div>
+                              <div className="mt-1 font-mono text-xs font-semibold text-slate-500">{formatBookingSubmittedTime(booking)}</div>
+                            </>
+                          ) : (
+                            <span className="text-sm font-semibold text-slate-300">-</span>
+                          )}
                         </td>
                         <td className="px-5 py-4 align-top text-slate-600">
                           <div className="truncate font-bold text-slate-800" title={booking.organizer || '-'}>{booking.organizer || '-'}</div>

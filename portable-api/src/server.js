@@ -461,6 +461,7 @@ function sqlBookingAvailabilityForClient(record) {
     actualEndTime: toIsoDate(record.ActualEndTime),
     verifiedAt: toIsoDate(record.VerifiedAt),
     verificationEmailStatus: record.VerificationEmailStatus || undefined,
+    createdAt: toIsoDate(record.CreatedAt),
     verificationEmailScheduledAt: toIsoDate(
       record.VerificationEmailScheduledAt,
     ),
@@ -505,7 +506,7 @@ async function listSqlRooms() {
 
 async function listSqlBookings(from, end) {
   const connection = await pool.connect();
-  const query = `SELECT Id, RoomId, Title, Organizer, Department, EmployeeId, DeskNumber, Email, EmailDisplayName, EmailJobTitle, EmailDepartment, StartTime, EndTime, Status, ActualStartTime, VerifiedAt,
+  const query = `SELECT Id, RoomId, Title, Organizer, Department, EmployeeId, DeskNumber, Email, EmailDisplayName, EmailJobTitle, EmailDepartment, CreatedAt, StartTime, EndTime, Status, ActualStartTime, ActualEndTime, VerifiedAt,
       VerificationEmailStatus, VerificationEmailScheduledAt,
       VerificationWindowOpenedAt, VerificationWindowClosedAt
     FROM dbo.Bookings
