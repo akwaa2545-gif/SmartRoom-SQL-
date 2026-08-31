@@ -812,7 +812,7 @@ function buildReminderMessage(bookingId, booking, appUrl) {
       : "See Smart Room for the scheduled time";
   const safeAppUrl = escapeHtml(appUrl);
   const logoUrl = escapeHtml(
-    new URL("/email-logo-white.png", config.appBaseUrl).toString(),
+    new URL("/favicon.png", config.appBaseUrl).toString(),
   );
 
   return `<!doctype html>
@@ -827,15 +827,15 @@ function buildReminderMessage(bookingId, booking, appUrl) {
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background:#f8fafc;padding:32px 12px;">
     <tr><td align="center">
       <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;background:#ffffff;border:1px solid #e2e8f0;border-radius:20px;overflow:hidden;">
-        <tr><td style="background:#e5673e;padding:22px 28px;">
+        <tr><td style="background:#ffffff;border-bottom:4px solid #e5673e;padding:22px 28px;">
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr>
             <td style="vertical-align:middle;">
               <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>
-                <td style="padding-right:10px;vertical-align:middle;"><img src="${logoUrl}" width="32" height="32" alt="TOKIN" style="display:block;border:0;"></td>
-                <td style="vertical-align:middle;"><div style="font-size:18px;line-height:20px;font-weight:800;color:#ffffff;letter-spacing:-0.2px;">TOKIN</div><div style="margin-top:2px;font-size:11px;color:#fff7ed;">Smart Room</div></td>
+                <td style="padding-right:10px;vertical-align:middle;"><img src="${logoUrl}" width="32" height="32" alt="TOKIN Smart Room" style="display:block;border:0;"></td>
+                <td style="vertical-align:middle;"><div style="font-size:18px;line-height:20px;font-weight:800;color:#e5673e;letter-spacing:-0.2px;">TOKIN</div><div style="margin-top:2px;font-size:11px;color:#64748b;">Smart Room</div></td>
               </tr></table>
             </td>
-            <td align="right" style="font-size:10px;font-weight:700;letter-spacing:1px;color:#ffffff;text-transform:uppercase;">Booking reminder</td>
+            <td align="right" style="font-size:10px;font-weight:700;letter-spacing:1px;color:#c2410c;text-transform:uppercase;">Booking reminder</td>
           </tr></table>
         </td></tr>
         <tr><td style="padding:30px 28px 12px;">
