@@ -11,7 +11,8 @@ This service runs on a domain-joined Windows PC, uses the local SQL Server only 
 5. Create `dbo.EmailAudit` by running `sql/001_email_audit.sql` in the `SmartRoom` database. For an existing installation, also run `sql/003_email_audit_history_details.sql` once so booking and room details appear in Email Sent History. These scripts grant the API SQL login only `SELECT` and `INSERT` on this audit table.
 6. Run `sql/004_email_queue.sql` once. The PC API uses this SQL table to schedule verification emails without scanning every Firestore booking each minute.
 7. Run `sql/005_sql_bookings.sql` and `sql/006_sql_operational_data.sql` once. These create the SQL tables used by room booking, operations, and the leaderboard endpoints.
-8. Run `start-api.cmd` for a manual test. It deliberately listens only on `127.0.0.1:8787`; do not expose the Node port or SQL Server directly. The host setup script creates a Windows startup task that relaunches the API after a reboot or unexpected stop.
+8. Run `sql/008_mascot_assignments.sql` once to enable Admin mascot assignments.
+9. Run `start-api.cmd` for a manual test. It deliberately listens only on `127.0.0.1:8787`; do not expose the Node port or SQL Server directly. The host setup script creates a Windows startup task that relaunches the API after a reboot or unexpected stop.
 
 For Windows 11, use `setup-direct-https.cmd PFX_PATH ALLOWED_NETWORK API_IP API_HOSTNAME` instead of IIS/ARR. It runs Node.js directly as HTTPS using the exported PFX certificate, configures the corporate-only firewall rule, and creates the startup task.
 

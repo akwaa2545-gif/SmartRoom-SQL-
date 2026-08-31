@@ -33,7 +33,8 @@ import { functions } from '../firebase';
 import { BookingDisplayState, getBookingDisplayState as getSharedBookingDisplayState, isBookingNoCheckIn } from '../utils/bookingStatus';
 import { getPortableLeaderboard, isPortableMailApiEnabled, lookupPortableMailbox, PortableLeaderboard, searchPortableMailboxes } from '../utils/portableMailApi';
 import { calculateLeaderboardStats, getLeaderboardHonorInfo } from '../utils/leaderboardStats';
-import LeaderboardPanel, { LeaderboardBookingBadge, TopRankHonorMascot } from './LeaderboardPanel';
+import { MascotAssignments, normalizeMascotDepartment } from '../utils/mascots';
+import LeaderboardPanel, { AssignedMascot, LeaderboardBookingBadge } from './LeaderboardPanel';
 
 export type DashboardMainView = 'status' | 'timeline';
 
@@ -50,6 +51,7 @@ interface DashboardProps {
   activeView?: DashboardMainView;
   onActiveViewChange?: (view: DashboardMainView) => void;
   onNavigateToLeaderboard?: () => void;
+  mascotAssignments?: MascotAssignments;
 }
 
 interface YageoMailboxUser {
@@ -72,9 +74,12 @@ const Dashboard: React.FC<DashboardProps> = ({
   setSelectedRoomId,
   activeView,
   onActiveViewChange,
-  onNavigateToLeaderboard
+  onNavigateToLeaderboard,
+  mascotAssignments = {}
 }) => {
   const t = TRANSLATIONS[language];
+  const getAssignedMascot = (booking: Booking) =>
+    mascotAssignments[normalizeMascotDepartment(booking.department || booking.emailDepartment)];
   const checkInWindowTooltip = language === 'th'
     ? 'Check in ได้ภายใน 15 นาทีก่อนหรือหลังเวลาเริ่มจอง เช่น หากเริ่มเวลา 15:00 น. สามารถ Check in ได้ตั้งแต่ 14:45 น. ถึง 15:15 น.'
     : 'Check in within 15 minutes before or after the booking start time. For example, if the booking starts at 15:00, check-in is allowed from 14:45 to 15:15.';
@@ -1322,7 +1327,6 @@ const Dashboard: React.FC<DashboardProps> = ({
                                   const displayState = getBookingDisplayState(b);
                                   const leaderboardRank = getBookingLeaderboardRank(b);
                                   const honor = getLeaderboardHonorInfo(leaderboardRank, language);
-                                  const departmentRank = getBookingDepartmentRank(b);
 
                                   return (
                                     <div key={b.id} className={`p-2 rounded-lg border text-[11px] transition-all relative ${
@@ -1348,8 +1352,8 @@ const Dashboard: React.FC<DashboardProps> = ({
                                           </span>
                                         </div>
                                         <div className="flex items-center gap-1 shrink-0">
-                                          {departmentRank && departmentRank <= 3 && (
-                                            <TopRankHonorMascot rank={departmentRank} departmentKey={b.department} isUsed={displayState === 'used'} colSpan={1} />
+                                          {getAssignedMascot(b) && (
+                                            <AssignedMascot mascotId={getAssignedMascot(b)!} isUsed={displayState === 'used'} />
                                           )}
                                           <span
                                             title={displayState === 'waitForVerify' || displayState === 'roomInUse' || displayState === 'noCheckIn' ? checkInWindowTooltip : undefined}
@@ -1479,7 +1483,6 @@ const Dashboard: React.FC<DashboardProps> = ({
 
                                   const leaderboardRank = getBookingLeaderboardRank(booking);
                                   const honor = getLeaderboardHonorInfo(leaderboardRank, language);
-                                  const departmentRank = getBookingDepartmentRank(booking);
                                   const displayState = getBookingDisplayState(booking);
 
                                   renderedCells.push(
@@ -1501,8 +1504,8 @@ const Dashboard: React.FC<DashboardProps> = ({
                                           <span className={`self-start text-[8px] px-1.5 py-0.5 rounded font-bold border max-w-[70%] truncate ${getBookingStatusBadgeClass(getBookingDisplayState(booking), booking.department, 'timeline')}`}>
                                             {getBookingDisplayLabel(booking)}
                                           </span>
-                                          {departmentRank && departmentRank <= 3 && (
-                                            <TopRankHonorMascot rank={departmentRank} departmentKey={booking.department} isUsed={displayState === 'used'} colSpan={colSpan} />
+                                          {getAssignedMascot(booking) && (
+                                            <AssignedMascot mascotId={getAssignedMascot(booking)!} isUsed={displayState === 'used'} />
                                           )}
                                         </div>
                                         <div className="truncate text-[9.5px] text-slate-800 font-bold w-full bg-white/70 px-1.5 py-0.5 rounded border border-white/80 flex items-center">
@@ -1855,7 +1858,6 @@ const Dashboard: React.FC<DashboardProps> = ({
                     const displayState = getBookingDisplayState(b);
                     const leaderboardRank = getBookingLeaderboardRank(b);
                     const honor = getLeaderboardHonorInfo(leaderboardRank, language);
-                    const departmentRank = getBookingDepartmentRank(b);
                     return (
                       <div key={b.id} className={`rounded-lg border p-3.5 shadow-sm transition-all relative ${
                         getBookingDepartmentClassForState(getBookingDisplayState(b), b.department)
@@ -1866,8 +1868,8 @@ const Dashboard: React.FC<DashboardProps> = ({
                               {formatTimeLocal(b.startTime, language)} - {formatTimeLocal(b.endTime, language)}
                             </span>
                             <div className="flex shrink-0 items-center gap-1.5">
-                              {departmentRank && departmentRank <= 3 && (
-                                <TopRankHonorMascot rank={departmentRank} departmentKey={b.department} isUsed={displayState === 'used'} colSpan={2} />
+                              {getAssignedMascot(b) && (
+                                <AssignedMascot mascotId={getAssignedMascot(b)!} isUsed={displayState === 'used'} />
                               )}
                               <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold border shadow-xs ${getBookingStatusBadgeClass(displayState, b.department)}`}>
                                 {getBookingDisplayLabel(b)}

@@ -346,6 +346,27 @@
         animation: petCompanionOrbit 2.35s ease-in-out infinite;
         filter: drop-shadow(0 2px 3px rgba(15, 23, 42, 0.2));
       }
+      @keyframes mascotDance { 0%,100%{transform:rotate(-8deg) translateY(0)}50%{transform:rotate(8deg) translateY(-4px)} }
+      @keyframes mascotWaddle { 0%,100%{transform:rotate(-10deg)}50%{transform:rotate(10deg) translateY(-2px)} }
+      @keyframes mascotHop { 0%,100%{transform:translateY(0)}45%{transform:translateY(-7px) scale(1.05,0.95)} }
+      @keyframes mascotSway { 0%,100%{transform:translateX(-2px) rotate(-7deg)}50%{transform:translateX(2px) rotate(7deg)} }
+      @keyframes mascotRoll { 0%,100%{transform:rotate(0deg)}50%{transform:rotate(360deg)} }
+      @keyframes mascotSpin { from{transform:rotate(0deg)}to{transform:rotate(360deg)} }
+      @keyframes mascotDash { 0%,100%{transform:translateX(0)}30%{transform:translateX(-4px)}60%{transform:translateX(4px)} }
+      @keyframes mascotWave { 0%,100%{transform:rotate(-5deg)}50%{transform:rotate(12deg) translateY(-3px)} }
+      @keyframes mascotSparkle { 0%,100%{transform:scale(0.9);filter:drop-shadow(0 0 0 #facc15)}50%{transform:scale(1.15);filter:drop-shadow(0 0 6px #facc15)} }
+      @keyframes mascotMinion { 0%,100%{transform:translateY(0) rotate(-4deg)}25%{transform:translateY(-4px) rotate(4deg)}50%{transform:translateY(-1px) rotate(-4deg)}75%{transform:translateY(-5px) rotate(4deg)} }
+      .mascot-dance { animation:mascotDance .8s ease-in-out infinite; }
+      .mascot-waddle { animation:mascotWaddle .7s ease-in-out infinite; }
+      .mascot-hop { animation:mascotHop .75s cubic-bezier(.34,1.56,.64,1) infinite; }
+      .mascot-sway { animation:mascotSway 1.1s ease-in-out infinite; }
+      .mascot-roll { animation:mascotRoll 1.6s ease-in-out infinite; }
+      .mascot-spin { animation:mascotSpin 1.8s linear infinite; }
+      .mascot-dash { animation:mascotDash .6s ease-in-out infinite; }
+      .mascot-wave { animation:mascotWave .9s ease-in-out infinite; }
+      .mascot-sparkle { animation:mascotSparkle 1.1s ease-in-out infinite; }
+      .mascot-minion { animation:mascotMinion .78s ease-in-out infinite; }
+      .mascot-resting { opacity:.72; animation:catSleepingBreathe 2.4s ease-in-out infinite; }
 
       @media (prefers-reduced-motion: reduce) {
         .booking-it-neon,
@@ -363,7 +384,10 @@
         .chibi-paws-3d,
         .chibi-crown-3d,
         .pet-companion-one,
-        .pet-companion-two {
+        .pet-companion-two,
+        .mascot-dance, .mascot-waddle, .mascot-hop, .mascot-sway,
+        .mascot-roll, .mascot-spin, .mascot-dash, .mascot-wave,
+        .mascot-sparkle, .mascot-minion, .mascot-resting {
           animation: none !important;
         }
       }

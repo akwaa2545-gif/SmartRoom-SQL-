@@ -20,7 +20,8 @@ import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
 import { db, auth, functions, handleFirestoreError, OperationType, testFirestoreConnection } from './firebase';
 import { isBookingNoCheckIn, isBookingRoomInUse } from './utils/bookingStatus';
-import { createPortableBooking, getPortableBookings, getPortableMaintenanceHistory, getPortableRooms, isPortableMailApiEnabled, lookupPortableMailbox, requestPortableLocalNetworkAccess, runPortableAdminTool, sendPortableBookingVerificationEmail } from './utils/portableMailApi';
+import { createPortableBooking, getPortableBookings, getPortableMaintenanceHistory, getPortableMascotAssignments, getPortableRooms, isPortableMailApiEnabled, lookupPortableMailbox, requestPortableLocalNetworkAccess, runPortableAdminTool, sendPortableBookingVerificationEmail } from './utils/portableMailApi';
+import { MascotAssignments, MascotId, normalizeMascotDepartment } from './utils/mascots';
 
 type AppView = 'grid' | 'dashboard' | 'leaderboard' | 'admin';
 type RouteMode = 'app' | 'verify';
@@ -257,6 +258,7 @@ const SmartRoomApplication: React.FC = () => {
   // --- DATABASE STATE (Real-time Firestore) ---
   const [rooms, setRooms] = useState<Room[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [mascotAssignments, setMascotAssignments] = useState<MascotAssignments>({});
   const [maintenanceHistory, setMaintenanceHistory] = useState<RoomMaintenanceRecord[]>([]);
   // Ref to track IDs that admin deleted locally — prevents onSnapshot from restoring them (no stale closure)
   const deletedBookingIdsRef = useRef<Set<string>>(new Set());
@@ -265,6 +267,35 @@ const SmartRoomApplication: React.FC = () => {
   const bookingsRef = useRef<Booking[]>([]);
   useEffect(() => { bookingsRef.current = bookings; }, [bookings]);
   const [roomStatusNow, setRoomStatusNow] = useState<Date>(() => new Date());
+
+  useEffect(() => {
+    if (!isPortableMailApiEnabled()) return;
+    let cancelled = false;
+    const loadMascotAssignments = async () => {
+      try {
+        const assignments = await getPortableMascotAssignments();
+        if (!cancelled) setMascotAssignments(assignments);
+      } catch (error) {
+        console.warn('Mascot assignments are unavailable:', error);
+      }
+    };
+    void loadMascotAssignments();
+    const timer = window.setInterval(() => void loadMascotAssignments(), 60_000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, []);
+
+  const saveMascotAssignment = async (department: string, mascotId: MascotId | null) => {
+    const normalizedDepartment = normalizeMascotDepartment(department);
+    if (!normalizedDepartment) throw new Error('Select a department.');
+    if (!isPortableMailApiEnabled()) throw new Error('Mascot assignments require the portable API.');
+    await runPortableAdminTool('save_department_mascot_assignment', { department: normalizedDepartment, mascotId });
+    setMascotAssignments((current) => {
+      const next = { ...current };
+      if (mascotId) next[normalizedDepartment] = mascotId;
+      else delete next[normalizedDepartment];
+      return next;
+    });
+  };
 
   const getClosureCleanupKey = (room: Room) => [
     room.id,
@@ -1843,6 +1874,7 @@ const SmartRoomApplication: React.FC = () => {
               activeView={dashboardActiveView}
               onActiveViewChange={setDashboardActiveView}
               onNavigateToLeaderboard={() => navigateToView('leaderboard')}
+              mascotAssignments={mascotAssignments}
             />
           )
         )}
@@ -1879,6 +1911,8 @@ const SmartRoomApplication: React.FC = () => {
               showNotification={showNotification}
               currentUser={adminUser}
               setCurrentUser={setAdminUser}
+              mascotAssignments={mascotAssignments}
+              onSaveMascotAssignment={saveMascotAssignment}
               onNavigateToDashboard={() => navigateToView('dashboard')}
             />
           </React.Suspense>

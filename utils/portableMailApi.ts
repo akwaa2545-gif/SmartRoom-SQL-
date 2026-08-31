@@ -1,5 +1,6 @@
 import { signInAnonymously } from 'firebase/auth';
 import { auth } from '../firebase';
+import { MascotAssignments, isMascotId, normalizeMascotDepartment } from './mascots';
 
 const viteEnvironment = (import.meta as unknown as { env?: { VITE_SMARTROOM_API_URL?: string } }).env;
 const apiBaseUrl = (viteEnvironment?.VITE_SMARTROOM_API_URL || '').trim().replace(/\/+$/, '');
@@ -156,6 +157,14 @@ export const getPortableBookings = () => request<{ bookings: PortableBooking[] }
 export const archivePortableExpiredBooking = (bookingId: string) => request<{ bookingId: string; archived: boolean }>(`/api/bookings/${encodeURIComponent(bookingId)}/archive-expired`, { method: 'POST' });
 export const getPortableMaintenanceHistory = () => request<{ history: PortableMaintenanceHistoryRecord[] }>('/api/room-maintenance-history');
 export const getPortableLeaderboard = () => request<PortableLeaderboard>('/api/leaderboard');
+export const getPortableMascotAssignments = async (): Promise<MascotAssignments> => {
+  const data = await request<{ assignments?: Array<{ department?: string; mascotId?: string }> }>('/api/mascot-assignments');
+  return (data.assignments || []).reduce<MascotAssignments>((assignments, assignment) => {
+    const department = normalizeMascotDepartment(assignment.department);
+    if (department && isMascotId(assignment.mascotId)) assignments[department] = assignment.mascotId;
+    return assignments;
+  }, {});
+};
 
 export const requestPortableLocalNetworkAccess = async () => {
   if (!apiBaseUrl) return 'unavailable' as const;

@@ -5,6 +5,7 @@ import { PortableLeaderboard } from '../utils/portableMailApi';
 import { calculateLeaderboardStats, formatDurationHours, LeaderboardPeriod, UserLeaderboardItem, getLeaderboardHonorInfo } from '../utils/leaderboardStats';
 import { formatDepartment } from '../translations';
 import { getBookingDepartmentBadgeClass } from '../bookingVisualStyles';
+import { MascotId, getMascotOption } from '../utils/mascots';
 
 interface LeaderboardPanelProps {
   leaderboard: PortableLeaderboard | null;
@@ -1356,6 +1357,26 @@ export const InteractiveDancingCat: React.FC<{
 };
 
 export const TopRankHonorMascot = InteractiveDancingCat;
+
+export const AssignedMascot: React.FC<{
+  mascotId: MascotId;
+  isUsed?: boolean;
+  className?: string;
+}> = ({ mascotId, isUsed = false, className = '' }) => {
+  const mascot = getMascotOption(mascotId);
+  if (!mascot) return null;
+
+  return (
+    <span
+      title={`${mascot.label}${isUsed ? ' · resting' : ''}`}
+      className={`relative inline-flex h-7 w-7 shrink-0 cursor-default items-center justify-center rounded-full border border-white/80 bg-white/90 text-base shadow-sm ${isUsed ? 'mascot-resting' : mascot.animation} ${className}`}
+      aria-label={mascot.label}
+    >
+      {mascot.emoji}
+      {mascotId === 'minion' && <span className="pointer-events-none absolute top-1 text-[8px]">👓</span>}
+    </span>
+  );
+};
 
 export const LeaderboardBookingBadge: React.FC<{
   rank: number;

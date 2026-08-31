@@ -12,6 +12,7 @@ import { db, auth, functions, handleFirestoreError, OperationType } from '../fir
 import { AdminGuideModal } from './admin/AdminGuideModal';
 import { EditBookingModal } from './admin/EditBookingModal';
 import { getBookingDepartmentBadgeClass, getBookingDepartmentClassForState, getBookingDepartmentDotClass } from '../bookingVisualStyles';
+import { MASCOT_OPTIONS, MascotAssignments, MascotId, getMascotOption, normalizeMascotDepartment } from '../utils/mascots';
 
 export const CLOSURE_REASONS = [
   { key: 'Renovation', labelEn: 'Renovation', labelTh: 'ปิดปรับปรุงชั่วคราว' },
@@ -154,11 +155,13 @@ interface AdminPanelProps {
   onCancelLogin?: () => void;
   onLoginSuccess?: () => void;
   onVerifyBooking?: (id: string) => void;
+  mascotAssignments?: MascotAssignments;
+  onSaveMascotAssignment?: (department: string, mascotId: MascotId | null) => Promise<void>;
 }
 
 type AdminBookingDisplayState = 'pending' | 'waitForVerify' | 'verified' | 'roomInUse' | 'used' | 'confirmed' | 'rejected' | 'noCheckIn';
 type EmailHistoryVerificationStatus = 'pendingSend' | 'waitForVerify' | 'notVerified' | 'verified' | 'na';
-type AdminTab = 'bookings' | 'rooms' | 'users' | 'analytics' | 'emails' | 'tools' | 'announcements';
+type AdminTab = 'bookings' | 'rooms' | 'users' | 'analytics' | 'emails' | 'tools' | 'announcements' | 'mascots';
 type TransactionStatusFilter = 'all' | 'upcoming' | 'used' | 'cancelled';
 type InternalBookingTarget = 'single' | 'all';
 type InternalBookingStatus = BookingStatus.CONFIRMED | BookingStatus.VERIFIED | BookingStatus.NO_SHOW;
@@ -348,7 +351,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   onBackToUser,
   loginPresentation = 'page',
   onCancelLogin,
-  onLoginSuccess
+  onLoginSuccess,
+  mascotAssignments = {},
+  onSaveMascotAssignment
 }) => {
   const t = TRANSLATIONS[language];
   const statusLabelFallback = STATUS_LABEL_FALLBACKS[language];
@@ -484,6 +489,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     onConfirm: () => { },
   });
   const [searchTerm, setSearchTerm] = useState('');
+  const [mascotDepartment, setMascotDepartment] = useState(DEPARTMENTS[0]);
+  const [mascotId, setMascotId] = useState<MascotId>('king-cat');
+  const [isSavingMascot, setIsSavingMascot] = useState(false);
   const [transactionStatusFilter, setTransactionStatusFilter] = useState<TransactionStatusFilter>('all');
   const [transactionDateFilter, setTransactionDateFilter] = useState('');
   const [transactionRoomFilter, setTransactionRoomFilter] = useState('all');
@@ -1615,6 +1623,27 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     });
   };
 
+  const handleSaveMascotAssignment = async () => {
+    const department = normalizeMascotDepartment(mascotDepartment);
+    if (!department) {
+      showNotification('Select a department.', 'error');
+      return;
+    }
+    if (!onSaveMascotAssignment) {
+      showNotification('Mascot assignments are unavailable until the portable API is configured.', 'error');
+      return;
+    }
+    try {
+      setIsSavingMascot(true);
+      await onSaveMascotAssignment(department, mascotId);
+      showNotification('Mascot assignment saved.', 'success');
+    } catch (error) {
+      showNotification(`Mascot assignment failed: ${error instanceof Error ? error.message : String(error)}`, 'error');
+    } finally {
+      setIsSavingMascot(false);
+    }
+  };
+
   useEffect(() => {
     if (currentUser && activeTab === 'announcements') {
       void loadAnnouncements();
@@ -2174,6 +2203,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         >
           <Megaphone className="w-4 h-4 mr-2" />
           Announcements
+        </button>
+
+        <button
+          onClick={() => setActiveTab('mascots')}
+          className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center whitespace-nowrap ${activeTab === 'mascots' ? 'bg-brand-50 text-brand-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}
+        >
+          <Sparkles className="w-4 h-4 mr-2" />
+          Mascot Rewards
         </button>
 
         <button
@@ -3117,6 +3154,48 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'mascots' && (
+        <div className="space-y-6 animate-in fade-in zoom-in-95 duration-200">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="flex items-center text-lg font-black text-slate-900"><Sparkles className="mr-2 h-5 w-5 text-amber-500" />Mascot Rewards</h2>
+            <p className="mt-1 text-sm font-medium text-slate-500">Assign one of 10 animated mascots to any department. The mascot appears on every booking from that department.</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500">Department</label>
+                <select value={mascotDepartment} onChange={(event) => setMascotDepartment(event.target.value)} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                  {getDepartmentSelectOptions(DEPARTMENTS).map(({ label }) => <option key={label} value={label}>{label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500">Animated mascot</label>
+                <select value={mascotId} onChange={(event) => setMascotId(event.target.value as MascotId)} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                  {MASCOT_OPTIONS.map((mascot) => <option key={mascot.id} value={mascot.id}>{mascot.emoji} {mascot.label}</option>)}
+                </select>
+              </div>
+              <div className="flex items-end">
+                <button type="button" disabled={isSavingMascot} onClick={handleSaveMascotAssignment} className="inline-flex w-full items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-brand-600 disabled:cursor-wait disabled:opacity-60">
+                  <Save className="mr-2 h-4 w-4" />{isSavingMascot ? 'Saving...' : 'Assign mascot'}
+                </button>
+              </div>
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
+              {MASCOT_OPTIONS.map((mascot) => <div key={mascot.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-center"><div className={`${mascot.animation} text-3xl`}>{mascot.emoji}</div><div className="mt-1 text-xs font-bold text-slate-700">{mascot.label}</div></div>)}
+            </div>
+          </div>
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-200 p-4"><h3 className="font-bold text-slate-900">Current assignments</h3><span className="text-xs font-bold text-slate-400">{Object.keys(mascotAssignments).length} assigned</span></div>
+            <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500"><tr><th className="px-5 py-3">Department</th><th className="px-5 py-3">Mascot</th><th className="px-5 py-3 text-right">Action</th></tr></thead><tbody className="divide-y divide-slate-100">
+              {Object.entries(mascotAssignments).length === 0 ? <tr><td colSpan={3} className="px-5 py-8 text-center text-sm font-semibold text-slate-400">No mascot assignments yet.</td></tr> : Object.entries(mascotAssignments).map(([department, assignedMascot]) => {
+                const mascot = getMascotOption(assignedMascot);
+                return <tr key={department}><td className="px-5 py-4 font-semibold text-slate-700">{formatDepartment(department)}</td><td className="px-5 py-4 font-bold text-slate-800">{mascot?.emoji} {mascot?.label || assignedMascot}</td><td className="px-5 py-4 text-right"><button type="button" onClick={() => { setMascotDepartment(department); setMascotId(assignedMascot); }} className="rounded-lg px-3 py-1.5 text-xs font-bold text-brand-600 hover:bg-brand-50">Edit</button><button type="button" disabled={isSavingMascot || !onSaveMascotAssignment} onClick={async () => { if (!onSaveMascotAssignment) return; try { setIsSavingMascot(true); await onSaveMascotAssignment(department, null); showNotification('Mascot assignment removed.', 'success'); } catch (error) { showNotification(`Could not remove mascot: ${error instanceof Error ? error.message : String(error)}`, 'error'); } finally { setIsSavingMascot(false); } }} className="ml-2 rounded-lg px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50">Remove</button></td></tr>;
+              })}
+            </tbody></table></div>
           </div>
         </div>
       )}

@@ -42,6 +42,13 @@ const db = databaseId ? getFirestore(databaseId) : getFirestore();
 const pool = new sql.ConnectionPool(config.sql);
 const requestTimes = new Map();
 const adminLoginTimes = new Map();
+const MASCOT_IDS = new Set([
+  "king-cat", "penguin", "bunny", "fox", "panda",
+  "shiba", "hamster", "otter", "unicorn", "minion",
+]);
+const MASCOT_DEPARTMENTS = new Set([
+  "MD", "HR", "SUST", "FA", "PLN", "PROC", "PE", "IT", "EE", "FAC", "QA", "TA MFG", "SC", "TE",
+]);
 
 function json(response, status, body) {
   response.writeHead(status, {
@@ -1862,6 +1869,42 @@ async function deleteSqlBooking(input) {
   }
 }
 
+async function listMascotAssignments() {
+  const connection = await pool.connect();
+  const result = await connection.request().query(
+    "SELECT Department, MascotId FROM dbo.MascotAssignments ORDER BY Department ASC;",
+  );
+  return result.recordset.flatMap((record) => {
+    const department = typeof record.Department === "string" ? record.Department.trim().toUpperCase() : "";
+    const mascotId = typeof record.MascotId === "string" ? record.MascotId.trim() : "";
+    return MASCOT_DEPARTMENTS.has(department) && MASCOT_IDS.has(mascotId) ? [{ department, mascotId }] : [];
+  });
+}
+
+async function saveMascotAssignment(input, username) {
+  const department = typeof input.department === "string" ? input.department.trim().toUpperCase() : "";
+  if (!MASCOT_DEPARTMENTS.has(department))
+    throw new ApiError(400, "invalid-mascot-department", "Department selection is invalid.");
+  const mascotId = input.mascotId;
+  const connection = await pool.connect();
+  if (mascotId === null || mascotId === undefined || mascotId === "") {
+    await connection.request().input("department", sql.NVarChar(40), department)
+      .query("DELETE FROM dbo.MascotAssignments WHERE Department = @department;");
+    return { department, mascotId: null, deleted: true };
+  }
+  if (typeof mascotId !== "string" || !MASCOT_IDS.has(mascotId))
+    throw new ApiError(400, "invalid-mascot-id", "Mascot selection is invalid.");
+  await connection.request()
+    .input("department", sql.NVarChar(40), department)
+    .input("mascotId", sql.NVarChar(40), mascotId)
+    .input("username", sql.NVarChar(100), username)
+    .query(`MERGE dbo.MascotAssignments WITH (HOLDLOCK) AS target
+      USING (SELECT @department AS Department) AS source ON target.Department = source.Department
+      WHEN MATCHED THEN UPDATE SET MascotId = @mascotId, UpdatedBy = @username, UpdatedAt = SYSUTCDATETIME()
+      WHEN NOT MATCHED THEN INSERT (Department, MascotId, UpdatedBy) VALUES (@department, @mascotId, @username);`);
+  return { department, mascotId, deleted: false };
+}
+
 async function runAdminTool(session, input) {
   const tool = typeof input.tool === "string" ? input.tool : "";
   const payload =
@@ -1911,6 +1954,10 @@ async function runAdminTool(session, input) {
   if (tool === "delete_booking" || tool === "delete_booking_as_admin") {
     requireSuperAdmin();
     return deleteSqlBooking(payload);
+  }
+  if (tool === "save_department_mascot_assignment") {
+    requireSuperAdmin();
+    return saveMascotAssignment(payload, session.username);
   }
   throw new ApiError(
     400,
@@ -2377,6 +2424,13 @@ const requestHandler = async (request, response) => {
       return json(response, 200, {
         success: true,
         data: await listSqlLeaderboard(),
+      });
+    }
+    if (request.method === "GET" && url.pathname === "/api/mascot-assignments") {
+      await requireFirebaseUser(request);
+      return json(response, 200, {
+        success: true,
+        data: { assignments: await listMascotAssignments() },
       });
     }
     if (
