@@ -15,9 +15,14 @@ for (const raw of (fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : '
 }
 
 const servicePath = path.resolve(root, process.env.FIREBASE_SERVICE_ACCOUNT_PATH || './secrets/firebase-service-account.json');
+if (!fs.existsSync(servicePath)) {
+  console.log(`[test-email-key] No service account found at ${servicePath} — skipping (CI environment).`);
+  process.exit(0);
+}
 admin.initializeApp({
   credential: admin.credential.cert(JSON.parse(fs.readFileSync(servicePath, 'utf8'))),
 });
+
 
 const databaseId = process.env.FIREBASE_DATABASE_ID;
 const firestore = databaseId ? getFirestore(databaseId) : getFirestore();
