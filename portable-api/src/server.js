@@ -580,14 +580,27 @@ async function listSqlLeaderboard(now = new Date()) {
     rankRequest.input(name, sql.NVarChar(254), row.emailKey);
     return `@${name}`;
   });
-  const bookingsResult = await rankRequest.query(`SELECT Id, LOWER(LTRIM(RTRIM(Email))) AS EmailKey
+  const bookingsResult = await rankRequest.query(`SELECT Id,
+      CASE WHEN NULLIF(LTRIM(RTRIM(Email)), N'') IS NOT NULL
+        THEN N'email:' + LOWER(LTRIM(RTRIM(Email)))
+      WHEN NULLIF(LTRIM(RTRIM(EmployeeId)), N'') IS NOT NULL
+        AND LTRIM(RTRIM(EmployeeId)) <> N'1111111'
+        THEN N'employee:' + LOWER(LTRIM(RTRIM(EmployeeId)))
+        ELSE N'booking:' + CONVERT(nvarchar(128), Id)
+      END AS EmailKey
     FROM dbo.Bookings
     WHERE Status = N'VERIFIED'
       AND ActualStartTime IS NOT NULL
       AND StartTime >= @periodStart
       AND EndTime < @periodEnd
       AND EndTime <= @now
-      AND LOWER(LTRIM(RTRIM(Email))) IN (${emailParameters.join(", ")});`);
+      AND CASE WHEN NULLIF(LTRIM(RTRIM(Email)), N'') IS NOT NULL
+        THEN N'email:' + LOWER(LTRIM(RTRIM(Email)))
+      WHEN NULLIF(LTRIM(RTRIM(EmployeeId)), N'') IS NOT NULL
+        AND LTRIM(RTRIM(EmployeeId)) <> N'1111111'
+        THEN N'employee:' + LOWER(LTRIM(RTRIM(EmployeeId)))
+        ELSE N'booking:' + CONVERT(nvarchar(128), Id)
+      END IN (${emailParameters.join(", ")});`);
 
   return {
     periodStart: start.toISOString(),

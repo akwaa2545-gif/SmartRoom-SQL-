@@ -159,6 +159,7 @@ interface AdminPanelProps {
 type AdminBookingDisplayState = 'pending' | 'waitForVerify' | 'verified' | 'roomInUse' | 'used' | 'confirmed' | 'rejected' | 'noCheckIn';
 type EmailHistoryVerificationStatus = 'pendingSend' | 'waitForVerify' | 'notVerified' | 'verified' | 'na';
 type AdminTab = 'bookings' | 'rooms' | 'users' | 'analytics' | 'emails' | 'tools' | 'announcements';
+type TransactionStatusFilter = 'all' | 'upcoming' | 'used' | 'cancelled';
 type InternalBookingTarget = 'single' | 'all';
 type InternalBookingStatus = BookingStatus.CONFIRMED | BookingStatus.VERIFIED | BookingStatus.NO_SHOW;
 type InternalAdminToolName = 'send_test_email' | 'update_booking_verify_status' | 'force_send_booking_email' | 'scan_booking_data_repair' | 'apply_booking_data_repair';
@@ -483,6 +484,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     onConfirm: () => { },
   });
   const [searchTerm, setSearchTerm] = useState('');
+  const [transactionStatusFilter, setTransactionStatusFilter] = useState<TransactionStatusFilter>('all');
+  const [transactionDateFilter, setTransactionDateFilter] = useState('');
+  const [transactionRoomFilter, setTransactionRoomFilter] = useState('all');
   const [emailSearchTerm, setEmailSearchTerm] = useState('');
   const [emailDateFilter, setEmailDateFilter] = useState('');
   const [emailVerificationFilter, setEmailVerificationFilter] = useState<'all' | 'unverified' | 'waitForVerify' | 'verified' | 'notVerified' | 'failed'>('all');
@@ -1057,9 +1061,29 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     );
   };
 
+  const bookingMatchesTransactionFilters = (booking: Booking) => {
+    if (transactionDateFilter && getDateInputValue(booking.startTime) !== transactionDateFilter) {
+      return false;
+    }
+    if (transactionRoomFilter !== 'all' && booking.roomId !== transactionRoomFilter) {
+      return false;
+    }
+    if (transactionStatusFilter === 'cancelled') {
+      return booking.status === BookingStatus.REJECTED;
+    }
+    if (transactionStatusFilter === 'used') {
+      return booking.status === BookingStatus.VERIFIED || Boolean(booking.actualStartTime);
+    }
+    if (transactionStatusFilter === 'upcoming') {
+      return booking.status !== BookingStatus.REJECTED && booking.startTime.getTime() > liveTime.getTime();
+    }
+    return true;
+  };
+
   // Admin transaction list: retain every booking record and show the newest submission first.
   const filteredBookings = bookings
     .filter(bookingMatchesSearch)
+    .filter(bookingMatchesTransactionFilters)
     .sort((a, b) => getBookingTransactionTime(b) - getBookingTransactionTime(a));
 
   const weekStartsOnSunday = (date: Date) => {
@@ -2216,7 +2240,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
           {/* Booking transaction table */}
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div className="p-4 border-b border-slate-200">
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
               <div>
                 <h2 className="font-bold text-slate-800">{language === 'th' ? 'รายการจองทั้งหมด' : 'Booking Transactions'}</h2>
                 <p className="mt-1 text-xs font-medium text-slate-500">
@@ -2232,6 +2257,36 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-9 pr-4 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent font-medium"
                 />
+              </div>
+              </div>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <select
+                  aria-label="Filter booking transactions by status"
+                  value={transactionStatusFilter}
+                  onChange={(e) => setTransactionStatusFilter(e.target.value as TransactionStatusFilter)}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                  <option value="all">{language === 'th' ? 'ทุกสถานะ' : 'All statuses'}</option>
+                  <option value="upcoming">{language === 'th' ? 'กำลังจะมาถึง' : 'Upcoming'}</option>
+                  <option value="used">{language === 'th' ? 'ใช้งานแล้ว' : 'Used'}</option>
+                  <option value="cancelled">{language === 'th' ? 'ยกเลิกแล้ว' : 'Cancelled'}</option>
+                </select>
+                <input
+                  aria-label="Filter booking transactions by scheduled date"
+                  type="date"
+                  value={transactionDateFilter}
+                  onChange={(e) => setTransactionDateFilter(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+                <select
+                  aria-label="Filter booking transactions by room"
+                  value={transactionRoomFilter}
+                  onChange={(e) => setTransactionRoomFilter(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                  <option value="all">{language === 'th' ? 'ทุกห้อง' : 'All rooms'}</option>
+                  {sortedRooms.map((room) => <option key={room.id} value={room.id}>{room.name}</option>)}
+                </select>
               </div>
             </div>
 

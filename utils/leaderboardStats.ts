@@ -99,6 +99,9 @@ export const EXCLUDED_LEADERBOARD_EMAILS = new Set<string>([
   "usani.chansod@yageo.com",
 ]);
 
+// Placeholder IDs are not a reliable person identity and must never merge users.
+const PLACEHOLDER_EMPLOYEE_IDS = new Set<string>(["1111111"]);
+
 export const calculateLeaderboardStats = (
   bookings: Booking[] = [],
   rooms: Room[] = [],
@@ -177,9 +180,15 @@ export const calculateLeaderboardStats = (
 
       const candidateName = (emailDisplayName || organizer || email || "Guest").trim();
 
-      // Strict Corporate Email Identity:
-      // Group by official Email address to match SQL Server database records 100%
-      const key = email || (emailDisplayName ? `name:${emailDisplayName.toLowerCase().trim()}` : `name:${organizer.toLowerCase().trim()}`) || "guest";
+      // Corporate email is the primary identity. Some bookings contain placeholder
+      // employee IDs (for example 1111111), so an employee ID is only a fallback.
+      const employeeId = (b.employeeId || "").trim().toLowerCase();
+      const usableEmployeeId = employeeId && !PLACEHOLDER_EMPLOYEE_IDS.has(employeeId);
+      const key = email
+        ? `email:${email}`
+        : usableEmployeeId
+          ? `employee:${employeeId}`
+          : (emailDisplayName ? `name:${emailDisplayName.toLowerCase().trim()}` : `name:${organizer.toLowerCase().trim()}`) || "guest";
 
       const bStart =
         b.startTime instanceof Date ? b.startTime : new Date(b.startTime);

@@ -21,7 +21,14 @@ function leaderboardScoresQuery() {
   // DATEDIFF is supported by the SQL Server versions used by the on-prem API.
   // Room bookings are short-lived, so minute totals cannot approach its range.
   return `WITH Eligible AS (
-      SELECT Id, LOWER(LTRIM(RTRIM(Email))) AS EmailKey,
+      SELECT Id,
+        CASE WHEN NULLIF(LTRIM(RTRIM(Email)), N'') IS NOT NULL
+          THEN N'email:' + LOWER(LTRIM(RTRIM(Email)))
+        WHEN NULLIF(LTRIM(RTRIM(EmployeeId)), N'') IS NOT NULL
+          AND LTRIM(RTRIM(EmployeeId)) <> N'1111111'
+          THEN N'employee:' + LOWER(LTRIM(RTRIM(EmployeeId)))
+          ELSE N'booking:' + CONVERT(nvarchar(128), Id)
+        END AS EmailKey,
         NULLIF(LTRIM(RTRIM(EmailDisplayName)), N'') AS EmailDisplayName,
         StartTime, EndTime
       FROM dbo.Bookings

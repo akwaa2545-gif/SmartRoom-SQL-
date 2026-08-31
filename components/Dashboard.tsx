@@ -1349,7 +1349,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                                         </div>
                                         <div className="flex items-center gap-1 shrink-0">
                                           {departmentRank && departmentRank <= 3 && (
-                                            <TopRankHonorMascot rank={departmentRank} isUsed={displayState === 'used'} colSpan={1} />
+                                            <TopRankHonorMascot rank={departmentRank} departmentKey={b.department} isUsed={displayState === 'used'} colSpan={1} />
                                           )}
                                           <span
                                             title={displayState === 'waitForVerify' || displayState === 'roomInUse' || displayState === 'noCheckIn' ? checkInWindowTooltip : undefined}
@@ -1502,7 +1502,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                                             {getBookingDisplayLabel(booking)}
                                           </span>
                                           {departmentRank && departmentRank <= 3 && (
-                                            <TopRankHonorMascot rank={departmentRank} isUsed={displayState === 'used'} colSpan={colSpan} />
+                                            <TopRankHonorMascot rank={departmentRank} departmentKey={booking.department} isUsed={displayState === 'used'} colSpan={colSpan} />
                                           )}
                                         </div>
                                         <div className="truncate text-[9.5px] text-slate-800 font-bold w-full bg-white/70 px-1.5 py-0.5 rounded border border-white/80 flex items-center">
@@ -1867,7 +1867,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                             </span>
                             <div className="flex shrink-0 items-center gap-1.5">
                               {departmentRank && departmentRank <= 3 && (
-                                <TopRankHonorMascot rank={departmentRank} isUsed={displayState === 'used'} colSpan={2} />
+                                <TopRankHonorMascot rank={departmentRank} departmentKey={b.department} isUsed={displayState === 'used'} colSpan={2} />
                               )}
                               <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold border shadow-xs ${getBookingStatusBadgeClass(displayState, b.department)}`}>
                                 {getBookingDisplayLabel(b)}

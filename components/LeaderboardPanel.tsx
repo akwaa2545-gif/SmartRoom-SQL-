@@ -732,7 +732,8 @@ export const InteractiveDancingCat: React.FC<{
   className?: string;
   colSpan?: number;
   maxRunDistance?: number;
-}> = ({ rank, isUsed = false, className = '', colSpan = 1, maxRunDistance }) => {
+  departmentKey?: string;
+}> = ({ rank, isUsed = false, className = '', colSpan = 1, maxRunDistance, departmentKey = '' }) => {
   if (!rank || rank > 3) return null;
 
   // Cat starts sleeping by default!
@@ -742,8 +743,25 @@ export const InteractiveDancingCat: React.FC<{
   const [isScared, setIsScared] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [bubble, setBubble] = useState<string | null>(null);
+  const companionPool = rank === 1
+    ? ['ðŸ¦Š', 'ðŸ¶', 'ðŸ¯', 'ðŸ±']
+    : rank === 2
+      ? ['ðŸ¼', 'ðŸ¦¦', 'ðŸ§', 'ðŸ¨']
+      : ['ðŸ¹', 'ðŸ°', 'ðŸ¶', 'ðŸ»'];
+  const pickCompanion = () => companionPool[Math.floor(Math.random() * companionPool.length)];
+  const [companions, setCompanions] = useState(() => [pickCompanion(), pickCompanion()]);
 
   const sleepTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Every top-three department receives a small, changing pet entourage.
+  // It is intentionally local to the booking card so each top department feels alive.
+  useEffect(() => {
+    setCompanions([pickCompanion(), pickCompanion()]);
+    const timer = window.setInterval(() => {
+      setCompanions([pickCompanion(), pickCompanion()]);
+    }, 7000 + Math.floor(Math.random() * 3000));
+    return () => window.clearInterval(timer);
+  }, [rank, departmentKey]);
 
   // Calculate safe travel distance based on booking duration (colSpan) to prevent overflowing card frame
   const maxDist = maxRunDistance !== undefined
@@ -993,6 +1011,10 @@ export const InteractiveDancingCat: React.FC<{
           {bubble}
         </span>
       )}
+
+      {/* Random companion pets for the top three departments. */}
+      <span className="pet-companion pet-companion-one pointer-events-none absolute -left-2 -top-3 z-10 text-[11px]" aria-hidden="true">{companions[0]}</span>
+      <span className="pet-companion pet-companion-two pointer-events-none absolute -right-2 top-2 z-10 text-[10px]" aria-hidden="true">{companions[1]}</span>
 
       {/* 3D Chibi Mascot Container */}
       <div
