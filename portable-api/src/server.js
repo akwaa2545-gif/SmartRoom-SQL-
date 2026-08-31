@@ -620,7 +620,7 @@ async function listSqlRoomMaintenanceHistory() {
   }));
 }
 
-function buildReminderMessage(bookingId, booking, appUrl) {
+function buildLegacyReminderMessage(bookingId, booking, appUrl) {
   const title = escapeHtml(booking.title || "TOKIN Smart Room booking");
   const roomName = escapeHtml(
     booking.roomName || booking.roomId || "Smart Room",
@@ -779,6 +779,92 @@ function buildReminderMessage(bookingId, booking, appUrl) {
           </tr></table>
         </td></tr>
 
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+function buildReminderMessage(bookingId, booking, appUrl) {
+  const title = escapeHtml(booking.title || "TOKIN Smart Room booking");
+  const roomName = escapeHtml(
+    booking.roomName || booking.roomId || "Smart Room",
+  );
+  const organizer = escapeHtml(
+    booking.organizer || booking.email || "Room organizer",
+  );
+  const department = escapeHtml(booking.department || "-");
+  const start = toDate(booking.startTime);
+  const end = toDate(booking.endTime);
+  const bookingDate = start
+    ? start.toLocaleDateString("en-GB", {
+        weekday: "short",
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        timeZone: "Asia/Bangkok",
+      })
+    : "Scheduled date";
+  const timeRange =
+    start && end
+      ? `${start.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Bangkok" })} – ${end.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Bangkok" })}`
+      : "See Smart Room for the scheduled time";
+  const safeAppUrl = escapeHtml(appUrl);
+  const logoUrl = escapeHtml(
+    new URL("/email-logo-white.png", config.appBaseUrl).toString(),
+  );
+
+  return `<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TOKIN Smart Room booking reminder</title>
+</head>
+<body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;color:#0f172a;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;">Your meeting starts in 15 minutes: ${title} at ${roomName}.</div>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background:#f8fafc;padding:32px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;background:#ffffff;border:1px solid #e2e8f0;border-radius:20px;overflow:hidden;">
+        <tr><td style="background:#e5673e;padding:22px 28px;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr>
+            <td style="vertical-align:middle;">
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>
+                <td style="padding-right:10px;vertical-align:middle;"><img src="${logoUrl}" width="32" height="32" alt="TOKIN" style="display:block;border:0;"></td>
+                <td style="vertical-align:middle;"><div style="font-size:18px;line-height:20px;font-weight:800;color:#ffffff;letter-spacing:-0.2px;">TOKIN</div><div style="margin-top:2px;font-size:11px;color:#fff7ed;">Smart Room</div></td>
+              </tr></table>
+            </td>
+            <td align="right" style="font-size:10px;font-weight:700;letter-spacing:1px;color:#ffffff;text-transform:uppercase;">Booking reminder</td>
+          </tr></table>
+        </td></tr>
+        <tr><td style="padding:30px 28px 12px;">
+          <div style="font-size:12px;font-weight:800;letter-spacing:0.8px;color:#e5673e;text-transform:uppercase;">Starting soon</div>
+          <h1 style="margin:8px 0 0;font-size:25px;line-height:32px;font-weight:800;color:#0f172a;">Your meeting starts in 15 minutes</h1>
+          <p style="margin:10px 0 0;font-size:14px;line-height:22px;color:#64748b;">ห้องประชุมของคุณใกล้ถึงเวลาแล้ว กรุณาไปที่ห้องตามเวลาที่จองไว้</p>
+        </td></tr>
+        <tr><td style="padding:16px 28px 8px;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border:1px solid #fed7aa;border-radius:14px;background:#fffaf7;">
+            <tr><td style="padding:20px 20px 16px;border-bottom:1px solid #fed7aa;">
+              <div style="font-size:11px;font-weight:800;letter-spacing:0.8px;color:#c2410c;text-transform:uppercase;">Meeting</div>
+              <div style="margin-top:6px;font-size:19px;line-height:26px;font-weight:800;color:#0f172a;">${title}</div>
+              <div style="margin-top:10px;font-size:13px;font-weight:700;color:#9a3412;">Room · ${roomName}</div>
+            </td></tr>
+            <tr><td style="padding:16px 20px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr>
+                <td width="50%" style="vertical-align:top;padding-right:12px;border-right:1px solid #fed7aa;"><div style="font-size:10px;font-weight:800;letter-spacing:0.7px;color:#94a3b8;text-transform:uppercase;">Date</div><div style="margin-top:5px;font-size:14px;font-weight:700;color:#0f172a;">${escapeHtml(bookingDate)}</div></td>
+                <td width="50%" style="vertical-align:top;padding-left:16px;"><div style="font-size:10px;font-weight:800;letter-spacing:0.7px;color:#94a3b8;text-transform:uppercase;">Time</div><div style="margin-top:5px;font-size:14px;font-weight:700;color:#e5673e;">${escapeHtml(timeRange)}</div></td>
+              </tr></table>
+            </td></tr>
+          </table>
+        </td></tr>
+        <tr><td style="padding:14px 28px 8px;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;">
+            <tr><td style="padding:13px 16px;font-size:13px;line-height:21px;"><span style="display:inline-block;width:92px;color:#64748b;">Booked by</span><strong style="color:#0f172a;">${organizer}</strong><br><span style="display:inline-block;width:92px;color:#64748b;">Department</span><strong style="color:#0f172a;">${department}</strong><br><span style="display:inline-block;width:92px;color:#64748b;">Booking ID</span><span style="font-family:monospace;font-size:12px;color:#475569;">${escapeHtml(bookingId)}</span></td></tr>
+          </table>
+        </td></tr>
+        <tr><td align="center" style="padding:24px 28px 28px;"><table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr><td style="background:#e5673e;border-radius:10px;"><a href="${safeAppUrl}" target="_blank" style="display:inline-block;padding:13px 24px;border-radius:10px;font-size:14px;font-weight:800;color:#ffffff;text-decoration:none;">Open TOKIN Smart Room</a></td></tr></table><p style="margin:14px 0 0;font-size:12px;line-height:18px;color:#64748b;">No action is required. Please arrive at the room on time.</p></td></tr>
+        <tr><td style="padding:18px 28px;background:#0f172a;"><div style="font-size:12px;font-weight:700;color:#ffffff;">TOKIN Smart Room</div><div style="margin-top:4px;font-size:11px;color:#94a3b8;">Automated booking notification · Please do not reply to this email.</div></td></tr>
       </table>
     </td></tr>
   </table>
