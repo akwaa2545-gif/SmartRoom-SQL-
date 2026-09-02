@@ -1068,6 +1068,22 @@ async function createSqlBooking(input, requesterUid) {
   const transaction = new sql.Transaction(pool);
   await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
   try {
+    const roomLock = await transaction
+      .request()
+      .input("resource", sql.NVarChar(255), `SmartRoom.Booking.Room.${roomId}`)
+      .query(`DECLARE @lockResult int;
+        EXEC @lockResult = sp_getapplock
+          @Resource = @resource,
+          @LockMode = N'Exclusive',
+          @LockOwner = N'Transaction',
+          @LockTimeout = 10000;
+        SELECT @lockResult AS LockResult;`);
+    if ((roomLock.recordset[0]?.LockResult ?? -999) < 0)
+      throw new ApiError(
+        503,
+        "booking-lock-timeout",
+        "Another booking for this room is being processed. Please try again.",
+      );
     const request = transaction.request();
     const room = await request
       .input("roomId", sql.NVarChar(128), roomId)

@@ -15,7 +15,7 @@ import { TRANSLATIONS, getEffectiveRoomStatus, isRoomClosureExpired, isRoomClose
 import { LayoutGrid, Calendar, BarChart3, Settings, Check, XCircle, AlertCircle, BookOpen, Menu, Trophy, X } from 'lucide-react';
 import { TermsModal, AccessDeniedOverlay } from './components/TermsModal';
 import { UserGuideModal } from './components/UserGuideModal';
-import { collection, onSnapshot, setDoc, doc, deleteDoc, updateDoc, serverTimestamp, query, where, deleteField } from 'firebase/firestore';
+import { collection, onSnapshot, setDoc, doc, deleteDoc, updateDoc, serverTimestamp, query, where, deleteField, runTransaction } from 'firebase/firestore';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
 import { db, auth, functions, handleFirestoreError, OperationType, testFirestoreConnection } from './firebase';
@@ -29,6 +29,23 @@ type RouteMode = 'app' | 'verify';
 const USER_DEFAULT_VIEW: AppView = 'dashboard';
 const VERIFICATION_WINDOW_BEFORE_MS = 15 * 60 * 1000;
 const VERIFICATION_WINDOW_AFTER_MS = 15 * 60 * 1000;
+const APP_VERSION = 'v1.0.21';
+
+const isBlockingBookingStatus = (status: unknown) =>
+  status !== BookingStatus.REJECTED && status !== BookingStatus.NO_SHOW;
+
+const toBookingDate = (value: unknown): Date | null => {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (value && typeof (value as { toDate?: unknown }).toDate === 'function') {
+    const date = (value as { toDate: () => Date }).toDate();
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  const date = new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const isBookingConflictError = (error: unknown) =>
+  error instanceof Error && error.message === 'booking-conflict';
 
 const isAdminRoutePath = (path?: string) => {
   const routePath = path ?? (typeof window !== 'undefined' ? window.location.pathname : '/');
@@ -267,6 +284,66 @@ const SmartRoomApplication: React.FC = () => {
   const bookingsRef = useRef<Booking[]>([]);
   useEffect(() => { bookingsRef.current = bookings; }, [bookings]);
   const [roomStatusNow, setRoomStatusNow] = useState<Date>(() => new Date());
+
+  const createFirestoreBookingWithConcurrency = async (booking: Record<string, unknown>) => {
+    const bookingId = String(booking.id || '');
+    const roomId = String(booking.roomId || '');
+    const startTime = toBookingDate(booking.startTime);
+    const endTime = toBookingDate(booking.endTime);
+    if (!bookingId || !roomId || !startTime || !endTime || endTime <= startTime) {
+      throw new Error('invalid-booking');
+    }
+
+    const bookingRef = doc(db, 'bookings', bookingId);
+    const roomBookingsQuery = query(collection(db, 'bookings'), where('roomId', '==', roomId));
+    await runTransaction(db, async (transaction) => {
+      const roomBookings = await transaction.get(roomBookingsQuery);
+      const hasConflict = roomBookings.docs.some((snapshot) => {
+        if (snapshot.id === bookingId) return false;
+        const existing = snapshot.data();
+        const existingStart = toBookingDate(existing.startTime);
+        const existingEnd = toBookingDate(existing.endTime);
+        return isBlockingBookingStatus(existing.status) &&
+          !!existingStart && !!existingEnd &&
+          existingStart < endTime && existingEnd > startTime;
+      });
+      if (hasConflict) throw new Error('booking-conflict');
+      transaction.set(bookingRef, booking);
+    });
+  };
+
+  const updateFirestoreBookingWithConcurrency = async (id: string, updatedFields: Partial<Booking>) => {
+    const bookingRef = doc(db, 'bookings', id);
+    const changesSchedule = updatedFields.roomId !== undefined || updatedFields.startTime !== undefined || updatedFields.endTime !== undefined || updatedFields.status !== undefined;
+    if (!changesSchedule) {
+      await updateDoc(bookingRef, updatedFields);
+      return;
+    }
+
+    await runTransaction(db, async (transaction) => {
+      const currentSnapshot = await transaction.get(bookingRef);
+      if (!currentSnapshot.exists()) throw new Error('booking-not-found');
+      const current = currentSnapshot.data() as Booking;
+      const roomId = String(updatedFields.roomId ?? current.roomId);
+      const startTime = toBookingDate(updatedFields.startTime ?? current.startTime);
+      const endTime = toBookingDate(updatedFields.endTime ?? current.endTime);
+      const status = updatedFields.status ?? current.status;
+      if (!roomId || !startTime || !endTime || endTime <= startTime) throw new Error('invalid-booking');
+
+      const roomBookings = await transaction.get(query(collection(db, 'bookings'), where('roomId', '==', roomId)));
+      const hasConflict = isBlockingBookingStatus(status) && roomBookings.docs.some((snapshot) => {
+        if (snapshot.id === id) return false;
+        const existing = snapshot.data();
+        const existingStart = toBookingDate(existing.startTime);
+        const existingEnd = toBookingDate(existing.endTime);
+        return isBlockingBookingStatus(existing.status) &&
+          !!existingStart && !!existingEnd &&
+          existingStart < endTime && existingEnd > startTime;
+      });
+      if (hasConflict) throw new Error('booking-conflict');
+      transaction.update(bookingRef, updatedFields);
+    });
+  };
 
   useEffect(() => {
     if (!isPortableMailApiEnabled()) return;
@@ -943,11 +1020,15 @@ const SmartRoomApplication: React.FC = () => {
   };
   const handleUpdateBooking = async (id: string, updatedFields: Partial<Booking>) => {
     try {
-      await updateDoc(doc(db, 'bookings', id), updatedFields);
+      await updateFirestoreBookingWithConcurrency(id, updatedFields);
       showNotification(language === 'th' ? 'แก้ไขข้อมูลการจองสำเร็จแล้ว' : 'Booking successfully updated', 'success');
       return true;
     } catch (e) {
       console.error("Failed to update booking:", e);
+      if (isBookingConflictError(e)) {
+        showNotification(language === 'th' ? 'ช่วงเวลานี้มีการจองห้องแล้ว' : 'This room is already booked for the selected time.', 'error');
+        return false;
+      }
       showNotification(language === 'th' ? `แก้ไขข้อมูลไม่สำเร็จ: ${e instanceof Error ? e.message : String(e)}` : `Update failed: ${e instanceof Error ? e.message : String(e)}`, 'error');
       try {
         handleFirestoreError(e, OperationType.UPDATE, `bookings/${id}`);
@@ -1413,7 +1494,7 @@ const SmartRoomApplication: React.FC = () => {
           showBookingConfirmationModal(bookingData.startTime, shouldScheduleReminder ? 'queued' : undefined);
           return true;
         }
-        await setDoc(doc(db, 'bookings', newBookingId), newBooking);
+        await createFirestoreBookingWithConcurrency(newBooking);
         showBookingConfirmationModal(bookingData.startTime, shouldScheduleReminder ? 'queued' : undefined);
         return true;
       } else {
@@ -1502,7 +1583,7 @@ const SmartRoomApplication: React.FC = () => {
             } as Booking;
             setBookings((previous) => [...previous, portableBooking]);
           } else {
-            await setDoc(doc(db, 'bookings', newBookingId), newBooking);
+            await createFirestoreBookingWithConcurrency(newBooking);
           }
         }
         setIsModalOpen(false);
@@ -1512,6 +1593,10 @@ const SmartRoomApplication: React.FC = () => {
         return true;
       }
     } catch (e) {
+      if (isBookingConflictError(e)) {
+        showNotification(language === 'th' ? 'ช่วงเวลานี้มีการจองห้องแล้ว กรุณาเลือกเวลาอื่น' : 'This room was just booked by someone else. Please choose another time.', 'error');
+        return false;
+      }
       handleFirestoreError(e, OperationType.CREATE, 'bookings');
       return false;
     }
@@ -1851,6 +1936,9 @@ const SmartRoomApplication: React.FC = () => {
             <Settings className="w-5 h-5" />
             <span>{t.adminPanel}</span>
           </button>
+          <div className="mt-3 text-center text-[10px] font-semibold tracking-wide text-slate-400" title="TOKIN Smart Room web release">
+            Web {APP_VERSION}
+          </div>
         </div>
 
       </aside>
