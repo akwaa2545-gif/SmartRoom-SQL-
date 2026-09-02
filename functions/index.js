@@ -4,7 +4,7 @@ const { getFirestore, Timestamp } = require('firebase-admin/firestore');
 
 if (!getApps().length) initializeApp();
 
-const db = getFirestore('ai-studio-28114784-a066-482c-9738-dfb6c9d68ce0');
+const getDatabase = () => getFirestore('ai-studio-28114784-a066-482c-9738-dfb6c9d68ce0');
 const BOOKING_TIME_FIELDS = new Set([
   'startTime', 'endTime', 'createdAt', 'actualStartTime', 'actualEndTime',
   'verifiedAt', 'verificationEmailScheduledAt', 'verificationWindowOpenedAt',
@@ -67,6 +67,7 @@ exports.saveBookingWithConcurrency = onCall(async (request) => {
     throw new HttpsError('invalid-argument', 'Booking operation is invalid.');
   }
 
+  const db = getDatabase();
   const bookingRef = db.collection('bookings').doc(bookingId);
   await db.runTransaction(async (transaction) => {
     const currentSnapshot = await transaction.get(bookingRef);
