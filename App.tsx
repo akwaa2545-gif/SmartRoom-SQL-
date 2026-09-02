@@ -15,7 +15,7 @@ import { TRANSLATIONS, getEffectiveRoomStatus, isRoomClosureExpired, isRoomClose
 import { LayoutGrid, Calendar, BarChart3, Settings, Check, XCircle, AlertCircle, BookOpen, Menu, Trophy, X } from 'lucide-react';
 import { TermsModal, AccessDeniedOverlay } from './components/TermsModal';
 import { UserGuideModal } from './components/UserGuideModal';
-import { collection, onSnapshot, setDoc, doc, deleteDoc, updateDoc, serverTimestamp, query, where, deleteField, runTransaction } from 'firebase/firestore';
+import { collection, onSnapshot, setDoc, doc, deleteDoc, updateDoc, serverTimestamp, query, where, deleteField } from 'firebase/firestore';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
 import { db, auth, functions, handleFirestoreError, OperationType, testFirestoreConnection } from './firebase';
@@ -31,9 +31,6 @@ const VERIFICATION_WINDOW_BEFORE_MS = 15 * 60 * 1000;
 const VERIFICATION_WINDOW_AFTER_MS = 15 * 60 * 1000;
 const APP_VERSION = 'v1.0.21';
 
-const isBlockingBookingStatus = (status: unknown) =>
-  status !== BookingStatus.REJECTED && status !== BookingStatus.NO_SHOW;
-
 const toBookingDate = (value: unknown): Date | null => {
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
   if (value && typeof (value as { toDate?: unknown }).toDate === 'function') {
@@ -44,8 +41,12 @@ const toBookingDate = (value: unknown): Date | null => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
-const isBookingConflictError = (error: unknown) =>
-  error instanceof Error && error.message === 'booking-conflict';
+const isBookingConflictError = (error: unknown) => {
+  if (error instanceof Error && error.message === 'booking-conflict') return true;
+  const callableError = error as { code?: unknown; message?: unknown };
+  return typeof callableError.code === 'string' && callableError.code.endsWith('/already-exists') &&
+    typeof callableError.message === 'string' && callableError.message.includes('already booked');
+};
 
 const isAdminRoutePath = (path?: string) => {
   const routePath = path ?? (typeof window !== 'undefined' ? window.location.pathname : '/');
@@ -294,54 +295,26 @@ const SmartRoomApplication: React.FC = () => {
       throw new Error('invalid-booking');
     }
 
-    const bookingRef = doc(db, 'bookings', bookingId);
-    const roomBookingsQuery = query(collection(db, 'bookings'), where('roomId', '==', roomId));
-    await runTransaction(db, async (transaction) => {
-      const roomBookings = await transaction.get(roomBookingsQuery);
-      const hasConflict = roomBookings.docs.some((snapshot) => {
-        if (snapshot.id === bookingId) return false;
-        const existing = snapshot.data();
-        const existingStart = toBookingDate(existing.startTime);
-        const existingEnd = toBookingDate(existing.endTime);
-        return isBlockingBookingStatus(existing.status) &&
-          !!existingStart && !!existingEnd &&
-          existingStart < endTime && existingEnd > startTime;
-      });
-      if (hasConflict) throw new Error('booking-conflict');
-      transaction.set(bookingRef, booking);
+    const serializedBooking = Object.fromEntries(Object.entries(booking).map(([field, value]) => [
+      field,
+      value instanceof Date ? value.toISOString() : value,
+    ]));
+    await httpsCallable(functions, 'saveBookingWithConcurrency')({
+      operation: 'create',
+      bookingId,
+      booking: serializedBooking,
     });
   };
 
   const updateFirestoreBookingWithConcurrency = async (id: string, updatedFields: Partial<Booking>) => {
-    const bookingRef = doc(db, 'bookings', id);
-    const changesSchedule = updatedFields.roomId !== undefined || updatedFields.startTime !== undefined || updatedFields.endTime !== undefined || updatedFields.status !== undefined;
-    if (!changesSchedule) {
-      await updateDoc(bookingRef, updatedFields);
-      return;
-    }
-
-    await runTransaction(db, async (transaction) => {
-      const currentSnapshot = await transaction.get(bookingRef);
-      if (!currentSnapshot.exists()) throw new Error('booking-not-found');
-      const current = currentSnapshot.data() as Booking;
-      const roomId = String(updatedFields.roomId ?? current.roomId);
-      const startTime = toBookingDate(updatedFields.startTime ?? current.startTime);
-      const endTime = toBookingDate(updatedFields.endTime ?? current.endTime);
-      const status = updatedFields.status ?? current.status;
-      if (!roomId || !startTime || !endTime || endTime <= startTime) throw new Error('invalid-booking');
-
-      const roomBookings = await transaction.get(query(collection(db, 'bookings'), where('roomId', '==', roomId)));
-      const hasConflict = isBlockingBookingStatus(status) && roomBookings.docs.some((snapshot) => {
-        if (snapshot.id === id) return false;
-        const existing = snapshot.data();
-        const existingStart = toBookingDate(existing.startTime);
-        const existingEnd = toBookingDate(existing.endTime);
-        return isBlockingBookingStatus(existing.status) &&
-          !!existingStart && !!existingEnd &&
-          existingStart < endTime && existingEnd > startTime;
-      });
-      if (hasConflict) throw new Error('booking-conflict');
-      transaction.update(bookingRef, updatedFields);
+    const serializedFields = Object.fromEntries(Object.entries(updatedFields).map(([field, value]) => [
+      field,
+      value instanceof Date ? value.toISOString() : value,
+    ]));
+    await httpsCallable(functions, 'saveBookingWithConcurrency')({
+      operation: 'update',
+      bookingId: id,
+      booking: serializedFields,
     });
   };
 
