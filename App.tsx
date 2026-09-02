@@ -994,6 +994,9 @@ const SmartRoomApplication: React.FC = () => {
   const handleUpdateBooking = async (id: string, updatedFields: Partial<Booking>) => {
     try {
       await updateFirestoreBookingWithConcurrency(id, updatedFields);
+      setBookings((current) => current.map((booking) =>
+        booking.id === id ? { ...booking, ...updatedFields } : booking
+      ));
       showNotification(language === 'th' ? 'แก้ไขข้อมูลการจองสำเร็จแล้ว' : 'Booking successfully updated', 'success');
       return true;
     } catch (e) {
