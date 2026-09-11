@@ -745,10 +745,10 @@ export const InteractiveDancingCat: React.FC<{
   const [isRunning, setIsRunning] = useState(false);
   const [bubble, setBubble] = useState<string | null>(null);
   const companionPool = rank === 1
-    ? ['ðŸ¦Š', 'ðŸ¶', 'ðŸ¯', 'ðŸ±']
+    ? ['🦊', '🐶', '🐯', '🐱']
     : rank === 2
-      ? ['ðŸ¼', 'ðŸ¦¦', 'ðŸ§', 'ðŸ¨']
-      : ['ðŸ¹', 'ðŸ°', 'ðŸ¶', 'ðŸ»'];
+      ? ['🐼', '🦦', '🐧', '🐨']
+      : ['🐹', '🐰', '🐶', '🐻'];
   const pickCompanion = () => companionPool[Math.floor(Math.random() * companionPool.length)];
   const [companions, setCompanions] = useState(() => [pickCompanion(), pickCompanion()]);
 

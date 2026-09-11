@@ -154,6 +154,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [title, setTitle] = useState('');
   const [organizer, setOrganizer] = useState('');
   const [department, setDepartment] = useState('');
+  const [isDepartmentManuallySelected, setIsDepartmentManuallySelected] = useState(false);
   const [employeeId, setEmployeeId] = useState('');
   const [email, setEmail] = useState('');
   const [emailSuggestions, setEmailSuggestions] = useState<YageoMailboxUser[]>([]);
@@ -666,6 +667,18 @@ const Dashboard: React.FC<DashboardProps> = ({
     user.mail || user.userPrincipalName || ''
   ).trim().toLowerCase();
 
+  const getMailboxFirstName = (user: YageoMailboxUser) => {
+    const mailbox = getMailboxEmail(user);
+    const localPart = mailbox.split('@')[0] || '';
+    const emailFirstName = localPart.split(/[._-]+/).find(Boolean);
+    if (emailFirstName) {
+      return emailFirstName.charAt(0).toUpperCase() + emailFirstName.slice(1);
+    }
+
+    const displayFirstName = user.displayName?.trim().split(/\s+/).find(Boolean);
+    return displayFirstName || '';
+  };
+
   const getMailboxInitials = (user: YageoMailboxUser) => {
     const label = user.displayName || getMailboxEmail(user);
     const words = label.split(/[\s.]+/).filter(Boolean);
@@ -677,6 +690,12 @@ const Dashboard: React.FC<DashboardProps> = ({
   const getMailboxRoleLine = (user: YageoMailboxUser) => (
     [user.jobTitle, user.department].map(value => value?.trim()).filter(Boolean).join(' - ')
   );
+
+  const getMailboxDepartmentValue = (mailboxDepartment?: string) => {
+    const normalized = formatDepartment(mailboxDepartment);
+    if (!normalized) return '';
+    return getDepartmentSelectOptions(DEPARTMENTS).find(({ label }) => label === normalized)?.value || '';
+  };
 
   const handleSelectEmailSuggestion = (user: YageoMailboxUser) => {
     const selectedEmail = getMailboxEmail(user);
@@ -719,6 +738,12 @@ const Dashboard: React.FC<DashboardProps> = ({
       onConfirm: () => {
         setSelectedEmailUser(user);
         setEmail(selectedEmail);
+        setOrganizer(getMailboxFirstName(user));
+        const mailboxDepartment = getMailboxDepartmentValue(user.department);
+        if (mailboxDepartment) {
+          setDepartment(mailboxDepartment);
+          setIsDepartmentManuallySelected(false);
+        }
         setEmailSuggestions([]);
         setIsEmailSuggestionsOpen(false);
         setBookingError(null);
@@ -1966,9 +1991,9 @@ const Dashboard: React.FC<DashboardProps> = ({
             </div>
 
             {/* Form */}
-            <form onSubmit={handleInlineSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleInlineSubmit} className="flex flex-col space-y-4 p-6">
               {/* Selected Time Info */}
-              <div className="p-3 bg-orange-50 border border-orange-200 rounded-xl flex items-start text-orange-900">
+              <div className="order-1 p-3 bg-orange-50 border border-orange-200 rounded-xl flex items-start text-orange-900">
                 <Clock className="w-4.5 h-4.5 text-orange-500 mr-2 flex-shrink-0 mt-0.5" />
                 <div>
                   <div className="text-[10px] font-bold text-orange-700 uppercase tracking-wider mb-0.5">
@@ -1981,7 +2006,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               </div>
 
               {/* Form Fields */}
-              <div>
+              <div className="order-3">
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                   {t.meetingTitle} <span className="text-rose-500">*</span>
                 </label>
@@ -1995,7 +2020,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="order-4 grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                     {t.organizerName} <span className="text-rose-500">*</span>
@@ -2015,8 +2040,11 @@ const Dashboard: React.FC<DashboardProps> = ({
                   </label>
                   <select
                     required
-                    value={department}
-                    onChange={(e) => setDepartment(e.target.value)}
+                  value={department}
+                    onChange={(e) => {
+                      setDepartment(e.target.value);
+                      setIsDepartmentManuallySelected(true);
+                    }}
                     className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 font-semibold text-slate-800"
                   >
                     <option value="">-- {t.selectDept} --</option>
@@ -2027,7 +2055,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="order-5 grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                     {language === 'th' ? 'รหัสพนักงาน (ตัวเลข 7 หลัก)' : 'Employee ID (7 digits)'} <span className="text-rose-500">*</span>
@@ -2058,7 +2086,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 </div>
               </div>
 
-              <div className="relative">
+              <div className="relative order-2">
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                   {language === 'th' ? 'อีเมล YAGEO' : 'YAGEO Email'} <span className="text-rose-500">*</span>
                 </label>
@@ -2066,9 +2094,12 @@ const Dashboard: React.FC<DashboardProps> = ({
                   type="text"
                   inputMode="email"
                   required
+                  autoFocus
                   value={email}
                   onChange={(e) => {
                     setSelectedEmailUser(null);
+                    setDepartment('');
+                    setIsDepartmentManuallySelected(false);
                     setEmail(e.target.value);
                     setIsEmailSuggestionsOpen(e.target.value.trim().length >= 2);
                   }}
@@ -2111,6 +2142,11 @@ const Dashboard: React.FC<DashboardProps> = ({
                       Remove
                     </button>
                   </div>
+                )}
+                {selectedEmailUser && getMailboxDepartmentValue(selectedEmailUser.department) && !isDepartmentManuallySelected && (
+                  <p className="mt-2 text-xs font-semibold text-emerald-700">
+                    {language === 'th' ? 'เลือกระบบแผนกจากข้อมูลอีเมลแล้ว คุณสามารถเปลี่ยนได้ด้านล่าง' : 'Department was filled from the email profile. You can change it below.'}
+                  </p>
                 )}
                 {isEmailSuggestionsOpen && (
                   <div
@@ -2164,14 +2200,14 @@ const Dashboard: React.FC<DashboardProps> = ({
 
               {/* Error feedback */}
               {bookingError && (
-                <div className="p-3 bg-rose-50 border border-rose-250 rounded-lg flex items-start text-xs text-rose-700 font-bold">
+                <div className="order-6 p-3 bg-rose-50 border border-rose-250 rounded-lg flex items-start text-xs text-rose-700 font-bold">
                   <AlertCircle className="w-4 h-4 mr-2.5 flex-shrink-0 text-rose-600 mt-0.5" />
                   <span>{bookingError}</span>
                 </div>
               )}
 
               {/* Actions */}
-              <div className="flex space-x-3 pt-3 border-t border-slate-100">
+              <div className="order-7 flex space-x-3 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setIsDetailsModalOpen(false)}

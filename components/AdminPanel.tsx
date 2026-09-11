@@ -1623,19 +1623,31 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     });
   };
 
+  const persistMascotAssignment = async (department: string, selectedMascotId: MascotId | null) => {
+    if (onSaveMascotAssignment) {
+      await onSaveMascotAssignment(department, selectedMascotId);
+      return;
+    }
+
+    if (!isPortableMailApiEnabled()) {
+      throw new Error('Mascot assignments require the portable API.');
+    }
+
+    await runPortableAdminTool('save_department_mascot_assignment', {
+      department,
+      mascotId: selectedMascotId,
+    });
+  };
+
   const handleSaveMascotAssignment = async () => {
     const department = normalizeMascotDepartment(mascotDepartment);
     if (!department) {
       showNotification('Select a department.', 'error');
       return;
     }
-    if (!onSaveMascotAssignment) {
-      showNotification('Mascot assignments are unavailable until the portable API is configured.', 'error');
-      return;
-    }
     try {
       setIsSavingMascot(true);
-      await onSaveMascotAssignment(department, mascotId);
+      await persistMascotAssignment(department, mascotId);
       showNotification('Mascot assignment saved.', 'success');
     } catch (error) {
       showNotification(`Mascot assignment failed: ${error instanceof Error ? error.message : String(error)}`, 'error');
@@ -3193,7 +3205,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
             <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500"><tr><th className="px-5 py-3">Department</th><th className="px-5 py-3">Mascot</th><th className="px-5 py-3 text-right">Action</th></tr></thead><tbody className="divide-y divide-slate-100">
               {Object.entries(mascotAssignments).length === 0 ? <tr><td colSpan={3} className="px-5 py-8 text-center text-sm font-semibold text-slate-400">No mascot assignments yet.</td></tr> : Object.entries(mascotAssignments).map(([department, assignedMascot]) => {
                 const mascot = getMascotOption(assignedMascot);
-                return <tr key={department}><td className="px-5 py-4 font-semibold text-slate-700">{formatDepartment(department)}</td><td className="px-5 py-4 font-bold text-slate-800">{mascot?.emoji} {mascot?.label || assignedMascot}</td><td className="px-5 py-4 text-right"><button type="button" onClick={() => { setMascotDepartment(department); setMascotId(assignedMascot); }} className="rounded-lg px-3 py-1.5 text-xs font-bold text-brand-600 hover:bg-brand-50">Edit</button><button type="button" disabled={isSavingMascot || !onSaveMascotAssignment} onClick={async () => { if (!onSaveMascotAssignment) return; try { setIsSavingMascot(true); await onSaveMascotAssignment(department, null); showNotification('Mascot assignment removed.', 'success'); } catch (error) { showNotification(`Could not remove mascot: ${error instanceof Error ? error.message : String(error)}`, 'error'); } finally { setIsSavingMascot(false); } }} className="ml-2 rounded-lg px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50">Remove</button></td></tr>;
+                return <tr key={department}><td className="px-5 py-4 font-semibold text-slate-700">{formatDepartment(department)}</td><td className="px-5 py-4 font-bold text-slate-800">{mascot?.emoji} {mascot?.label || assignedMascot}</td><td className="px-5 py-4 text-right"><button type="button" onClick={() => { setMascotDepartment(department); setMascotId(assignedMascot); }} className="rounded-lg px-3 py-1.5 text-xs font-bold text-brand-600 hover:bg-brand-50">Edit</button><button type="button" disabled={isSavingMascot} onClick={async () => { try { setIsSavingMascot(true); await persistMascotAssignment(department, null); showNotification('Mascot assignment removed.', 'success'); } catch (error) { showNotification(`Could not remove mascot: ${error instanceof Error ? error.message : String(error)}`, 'error'); } finally { setIsSavingMascot(false); } }} className="ml-2 rounded-lg px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50">Remove</button></td></tr>;
               })}
             </tbody></table></div>
           </div>
