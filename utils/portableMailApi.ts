@@ -1,6 +1,6 @@
 import { signInAnonymously } from 'firebase/auth';
 import { auth } from '../firebase';
-import { MascotAssignments, isMascotId, normalizeMascotDepartment } from './mascots';
+import { MascotAssignments, isMascotId, normalizeMascotEmail } from './mascots';
 
 const viteEnvironment = (import.meta as unknown as { env?: { VITE_SMARTROOM_API_URL?: string } }).env;
 const apiBaseUrl = (viteEnvironment?.VITE_SMARTROOM_API_URL || '').trim().replace(/\/+$/, '');
@@ -138,6 +138,31 @@ export interface PortableLeaderboard {
   bookingRanks: PortableLeaderboardBookingRank[];
 }
 
+export interface PortableAdminSession {
+  id: string;
+  username: string;
+  role: 'SUPER_ADMIN' | 'APPROVER';
+  ipAddress: string;
+  deviceLabel: string;
+  createdAt?: string | null;
+  lastSeenAt?: string | null;
+  expiresAt?: string | null;
+  isCurrent?: boolean;
+}
+
+export interface PortableAdminSessionSummary {
+  totalAdminAccounts: number;
+  activeAdminCount: number;
+  activeSessionCount: number;
+  uniqueIpCount: number;
+  activeWindowMinutes: number;
+}
+
+export interface PortableAdminSessionsResponse {
+  sessions: PortableAdminSession[];
+  summary: PortableAdminSessionSummary;
+}
+
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const user = auth.currentUser || (await signInAnonymously(auth)).user;
   const token = await user.getIdToken();
@@ -158,10 +183,10 @@ export const archivePortableExpiredBooking = (bookingId: string) => request<{ bo
 export const getPortableMaintenanceHistory = () => request<{ history: PortableMaintenanceHistoryRecord[] }>('/api/room-maintenance-history');
 export const getPortableLeaderboard = () => request<PortableLeaderboard>('/api/leaderboard');
 export const getPortableMascotAssignments = async (): Promise<MascotAssignments> => {
-  const data = await request<{ assignments?: Array<{ department?: string; mascotId?: string }> }>('/api/mascot-assignments');
+  const data = await request<{ assignments?: Array<{ email?: string; mascotId?: string }> }>('/api/mascot-assignments');
   return (data.assignments || []).reduce<MascotAssignments>((assignments, assignment) => {
-    const department = normalizeMascotDepartment(assignment.department);
-    if (department && isMascotId(assignment.mascotId)) assignments[department] = assignment.mascotId;
+    const email = normalizeMascotEmail(assignment.email);
+    if (email && isMascotId(assignment.mascotId)) assignments[email] = assignment.mascotId;
     return assignments;
   }, {});
 };
@@ -198,9 +223,17 @@ export const loginPortableAdmin = async (username: string, password: string) => 
   return payload.data.user;
 };
 export const logoutPortableAdmin = () => {
+  const token = adminSessionToken;
   adminSessionToken = '';
   saveAdminSessionToken('');
   savePortableAdminPassword('');
+  if (token && apiBaseUrl) {
+    void fetch(`${apiBaseUrl}/api/admin/session/logout`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}` },
+      keepalive: true,
+    }).catch(() => undefined);
+  }
 };
 export const getPortableAdminPassword = () => {
   try {
@@ -209,6 +242,22 @@ export const getPortableAdminPassword = () => {
     return '';
   }
 };
+
+const requestPortableAdmin = async <T>(path: string, init?: RequestInit): Promise<T> => {
+  if (!adminSessionToken) throw new Error('Please sign in to Admin again.');
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    ...init,
+    headers: { authorization: `Bearer ${adminSessionToken}`, ...(init?.headers || {}) },
+  });
+  const result = await response.json().catch(() => ({})) as { success?: boolean; data?: T; error?: { message?: string } };
+  if (response.status === 401) logoutPortableAdmin();
+  if (!response.ok || !result.success) throw new Error(result.error?.message || 'Admin request failed.');
+  return result.data as T;
+};
+
+export const getPortableAdminSessions = () => requestPortableAdmin<PortableAdminSessionsResponse>('/api/admin/sessions');
+export const heartbeatPortableAdminSession = () => requestPortableAdmin<{ lastSeenAt?: string; username?: string }>('/api/admin/session/heartbeat', { method: 'POST' });
+
 export const runPortableAdminTool = async <T>(tool: string, payload: Record<string, unknown>) => {
   if (!adminSessionToken) throw new Error('Please sign in to Admin again.');
   const response = await fetch(`${apiBaseUrl}/api/admin/tools`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${adminSessionToken}` }, body: JSON.stringify({ tool, payload }) });

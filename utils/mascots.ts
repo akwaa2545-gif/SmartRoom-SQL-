@@ -1,5 +1,3 @@
-import { formatDepartment } from '../translations';
-
 export const MASCOT_OPTIONS = [
   { id: 'king-cat', label: 'King Cat', emoji: '🐱', animation: 'mascot-dance' },
   { id: 'penguin', label: 'Waddling Penguin', emoji: '🐧', animation: 'mascot-waddle' },
@@ -19,8 +17,10 @@ export type MascotAssignments = Record<string, MascotId>;
 export const isMascotId = (value: unknown): value is MascotId =>
   typeof value === 'string' && MASCOT_OPTIONS.some((mascot) => mascot.id === value);
 
-export const normalizeMascotDepartment = (value?: string | null) =>
-  formatDepartment(value);
+export const normalizeMascotEmail = (value?: string | null) => {
+  const email = String(value || '').trim().toLowerCase();
+  return /^[^\s@]+@yageo\.com$/i.test(email) ? email : '';
+};
 
 export const getMascotOption = (id?: string | null) =>
   MASCOT_OPTIONS.find((mascot) => mascot.id === id) || null;

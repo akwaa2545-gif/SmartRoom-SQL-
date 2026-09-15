@@ -86,6 +86,9 @@ The first route reads the existing Firestore booking, checks ownership/status/ti
 | Method | Path | Auth | Request | Success data |
 | --- | --- | --- | --- |
 | `POST` | `/api/admin/session` | Admin password | `{ username, password }` | `{ user: { id, username, role, name }, token }` |
+| `POST` | `/api/admin/session/heartbeat` | PC admin session | None | Updates the session presence timestamp. |
+| `POST` | `/api/admin/session/logout` | PC admin session | None | Revokes the current activity row. |
+| `GET` | `/api/admin/sessions` | Super Admin PC session | None | Active admin sessions, device labels, server-observed IPs, and counts. |
 | `POST` | `/api/admin/tools` | PC admin session | `{ tool, payload }` | Tool-specific result |
 | `GET` | `/api/admin/email-history?limit=200` | PC admin session | Optional `limit`, 1–200 | `{ history: [...] }` |
 
@@ -113,6 +116,7 @@ These routes are incomplete as a production cutover because SQL booking list/rea
 | Table | Purpose | Status |
 | --- | --- | --- |
 | `dbo.SmartRoomAdmins` | Admin credentials, roles, session-version revocation | Active |
+| `dbo.SmartRoomAdminSessions` | Short-lived admin presence, device label, and server-observed IP | Active after script 010 |
 | `dbo.EmailAudit` | Test and booking email delivery history | Active after scripts 001/003 |
 | `dbo.EmailQueue` | SQL scheduling/claim state for future verification email | Prepared; apply script 004 |
 | `dbo.Bookings` | SQL booking/token/status store | Migration preparation; script 005 |
@@ -138,11 +142,13 @@ The host `.env` must provide values for these names. Use real values only on the
 | `FIREBASE_SERVICE_ACCOUNT_PATH`, `FIREBASE_DATABASE_ID` | Legacy Firestore access during migration |
 | `ALLOW_ANONYMOUS_INTERNAL_AUTH` | Explicitly permits the current anonymous Firebase app flow |
 | `ADMIN_SESSION_SIGNING_SECRET` | Signs PC-admin session tokens |
+| `TRUST_PROXY` | Set to `true` only behind a trusted local reverse proxy that forwards client IPs; leave `false` for direct HTTPS |
 
 ## Rate limits and operational behavior
 
 - General endpoint limit: 40 requests per source IP per minute.
 - Admin login: 5 attempts per source IP and username per 15 minutes.
+- Admin Activity considers a session active when its heartbeat was received within the last 5 minutes. IP addresses are network-connection diagnostics, not person/device identity.
 - Power Automate calls timeout after 15 seconds.
 - Email audits are best effort: a SQL audit failure must not change a successfully delivered email to failed.
 - The host API must bind only to the configured internal HTTPS interface or to localhost behind IIS.
@@ -155,6 +161,7 @@ Run scripts in the `SmartRoom` database in numeric order when applicable:
 2. `portable-api/sql/002_smartroom_admins.sql`
 3. `portable-api/sql/003_email_audit_history_details.sql`
 4. `portable-api/sql/004_email_queue.sql`
+5. `portable-api/sql/010_admin_sessions.sql`
 
 `005_sql_bookings.sql` and `006_sql_operational_data.sql` are preparation for the full SQL migration. Do **not** switch the website to SQL booking creation until the SQL booking read API and Firestore import are complete.
 

@@ -72,6 +72,7 @@ function getConfig() {
       .filter(Boolean),
     allowAnonymousInternalAuth:
       process.env.ALLOW_ANONYMOUS_INTERNAL_AUTH === "true",
+    trustProxy: process.env.TRUST_PROXY === "true",
     serviceAccountPath,
     adminSessionSecret: process.env.ADMIN_SESSION_SIGNING_SECRET || "",
     tlsPfxPath,

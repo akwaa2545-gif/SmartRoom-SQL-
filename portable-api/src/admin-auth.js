@@ -42,11 +42,12 @@ function base64Json(value) {
   return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
 }
 
-function createSession({ username, role, sessionVersion }, secret, expiresAt) {
+function createSession({ username, role, sessionVersion, sid }, secret, expiresAt) {
   const payload = base64Json({
     username,
     role,
     sessionVersion,
+    sid,
     exp: expiresAt,
   });
   const signature = crypto
@@ -75,6 +76,7 @@ function verifySession(token, secret, now = Date.now()) {
       !data ||
       typeof data.username !== "string" ||
       typeof data.sessionVersion !== "string" ||
+      (data.sid !== undefined && typeof data.sid !== "string") ||
       !["SUPER_ADMIN", "APPROVER"].includes(data.role) ||
       !Number.isFinite(data.exp) ||
       data.exp <= now

@@ -33,7 +33,7 @@ import { functions } from '../firebase';
 import { BookingDisplayState, getBookingDisplayState as getSharedBookingDisplayState, isBookingNoCheckIn } from '../utils/bookingStatus';
 import { getPortableLeaderboard, isPortableMailApiEnabled, lookupPortableMailbox, PortableLeaderboard, searchPortableMailboxes } from '../utils/portableMailApi';
 import { calculateLeaderboardStats, getLeaderboardHonorInfo } from '../utils/leaderboardStats';
-import { MascotAssignments, normalizeMascotDepartment } from '../utils/mascots';
+import { MascotAssignments, normalizeMascotEmail } from '../utils/mascots';
 import LeaderboardPanel, { AssignedMascot, LeaderboardBookingBadge, TopRankHonorMascot } from './LeaderboardPanel';
 
 export type DashboardMainView = 'status' | 'timeline';
@@ -78,8 +78,10 @@ const Dashboard: React.FC<DashboardProps> = ({
   mascotAssignments = {}
 }) => {
   const t = TRANSLATIONS[language];
-  const getAssignedMascot = (booking: Booking) =>
-    mascotAssignments[normalizeMascotDepartment(booking.department || booking.emailDepartment)];
+  const getAssignedMascot = (booking: Booking) => {
+    const email = normalizeMascotEmail(booking.email);
+    return email ? mascotAssignments[email] : undefined;
+  };
   const checkInWindowTooltip = language === 'th'
     ? 'Check in ได้ภายใน 15 นาทีก่อนหรือหลังเวลาเริ่มจอง เช่น หากเริ่มเวลา 15:00 น. สามารถ Check in ได้ตั้งแต่ 14:45 น. ถึง 15:15 น.'
     : 'Check in within 15 minutes before or after the booking start time. For example, if the booking starts at 15:00, check-in is allowed from 14:45 to 15:15.';

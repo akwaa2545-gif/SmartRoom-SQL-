@@ -15,8 +15,14 @@ test('rejects an incorrect admin password', () => {
 
 test('verifies a signed, non-expired admin session', () => {
   const signingKey = 'unit-test-signing-key';
-  const token = createSession({ username: 'admin', role: 'SUPER_ADMIN', sessionVersion: '1' }, signingKey, Date.now() + 60_000);
-  assert.deepEqual(verifySession(token, signingKey).username, 'admin');
+  const token = createSession({ username: 'admin', role: 'SUPER_ADMIN', sessionVersion: '1', sid: 'session-1' }, signingKey, Date.now() + 60_000);
+  assert.deepEqual(verifySession(token, signingKey), {
+    username: 'admin',
+    role: 'SUPER_ADMIN',
+    sessionVersion: '1',
+    sid: 'session-1',
+    exp: verifySession(token, signingKey).exp,
+  });
 });
 
 test('rejects a modified admin session', () => {

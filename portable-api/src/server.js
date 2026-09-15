@@ -31,6 +31,10 @@ const {
   createSession,
   verifySession,
 } = require("./admin-auth");
+const {
+  getAdminDeviceLabel,
+  getClientIp,
+} = require("./admin-activity");
 
 const config = getConfig();
 const serviceAccount = JSON.parse(
@@ -42,12 +46,13 @@ const db = databaseId ? getFirestore(databaseId) : getFirestore();
 const pool = new sql.ConnectionPool(config.sql);
 const requestTimes = new Map();
 const adminLoginTimes = new Map();
+const ADMIN_SESSION_TTL_MS = 8 * 60 * 60 * 1000;
+const ADMIN_SESSION_ACTIVE_WINDOW_MS = 5 * 60 * 1000;
+const ADMIN_SESSION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+let adminActivityWarningShown = false;
 const MASCOT_IDS = new Set([
   "king-cat", "penguin", "bunny", "fox", "panda",
   "shiba", "hamster", "otter", "unicorn", "minion",
-]);
-const MASCOT_DEPARTMENTS = new Set([
-  "MD", "HR", "SUST", "FA", "PLN", "PROC", "PE", "IT", "EE", "FAC", "QA", "TA MFG", "SC", "TE",
 ]);
 
 function json(response, status, body) {
@@ -258,6 +263,177 @@ async function getAdminAccount(username) {
   }
 }
 
+function getAdminSessionRequestMetadata(request) {
+  const rawUserAgent = request?.headers?.["user-agent"];
+  const userAgent = Array.isArray(rawUserAgent)
+    ? rawUserAgent[0]
+    : rawUserAgent;
+  const safeUserAgent = typeof userAgent === "string"
+    ? userAgent.slice(0, 512)
+    : "";
+
+  return {
+    ipAddress: getClientIp(request, config.trustProxy),
+    userAgent: safeUserAgent,
+    deviceLabel: getAdminDeviceLabel(safeUserAgent),
+  };
+}
+
+function reportAdminActivityError(cause) {
+  if (adminActivityWarningShown) return;
+  adminActivityWarningShown = true;
+  console.error("admin session activity is unavailable", {
+    message: cause?.message,
+  });
+}
+
+async function createAdminSessionActivity(sessionId, account, request, expiresAt) {
+  if (!sessionId || !account?.Id) return;
+  try {
+    const metadata = getAdminSessionRequestMetadata(request);
+    const connection = await pool.connect();
+    await connection
+      .request()
+      .input("sessionId", sql.UniqueIdentifier, sessionId)
+      .input("adminId", sql.UniqueIdentifier, account.Id)
+      .input("username", sql.NVarChar(128), account.Username)
+      .input("role", sql.NVarChar(20), account.Role)
+      .input("ipAddress", sql.NVarChar(64), metadata.ipAddress)
+      .input("userAgent", sql.NVarChar(512), metadata.userAgent)
+      .input("deviceLabel", sql.NVarChar(120), metadata.deviceLabel)
+      .input("expiresAt", sql.DateTime2, expiresAt)
+      .input(
+        "retentionCutoff",
+        sql.DateTime2,
+        new Date(Date.now() - ADMIN_SESSION_RETENTION_MS),
+      )
+      .query(`INSERT INTO dbo.SmartRoomAdminSessions
+          (SessionId, AdminId, Username, Role, IpAddress, UserAgent, DeviceLabel, ExpiresAt)
+        VALUES
+          (@sessionId, @adminId, @username, @role, @ipAddress, @userAgent, @deviceLabel, @expiresAt);
+        DELETE FROM dbo.SmartRoomAdminSessions
+        WHERE ExpiresAt < @retentionCutoff
+          OR RevokedAt < @retentionCutoff;`);
+  } catch (cause) {
+    // The activity table is an observability feature. A missing migration must
+    // not prevent a valid administrator from signing in.
+    reportAdminActivityError(cause);
+  }
+}
+
+async function touchAdminSession(session, request) {
+  if (!session?.sid) return;
+  try {
+    const metadata = getAdminSessionRequestMetadata(request);
+    const connection = await pool.connect();
+    await connection
+      .request()
+      .input("sessionId", sql.UniqueIdentifier, session.sid)
+      .input("username", sql.NVarChar(128), session.username)
+      .input("ipAddress", sql.NVarChar(64), metadata.ipAddress)
+      .input("userAgent", sql.NVarChar(512), metadata.userAgent)
+      .input("deviceLabel", sql.NVarChar(120), metadata.deviceLabel)
+      .query(`UPDATE dbo.SmartRoomAdminSessions
+        SET LastSeenAt = SYSUTCDATETIME(),
+            IpAddress = @ipAddress,
+            UserAgent = @userAgent,
+            DeviceLabel = @deviceLabel
+        WHERE SessionId = @sessionId
+          AND Username = @username
+          AND RevokedAt IS NULL
+          AND ExpiresAt > SYSUTCDATETIME();`);
+  } catch (cause) {
+    reportAdminActivityError(cause);
+  }
+}
+
+async function revokeAdminSession(session) {
+  if (!session?.sid) return;
+  try {
+    const connection = await pool.connect();
+    await connection
+      .request()
+      .input("sessionId", sql.UniqueIdentifier, session.sid)
+      .query(`UPDATE dbo.SmartRoomAdminSessions
+        SET RevokedAt = SYSUTCDATETIME()
+        WHERE SessionId = @sessionId AND RevokedAt IS NULL;`);
+  } catch (cause) {
+    reportAdminActivityError(cause);
+  }
+}
+
+async function listAdminSessions(session) {
+  if (session.role !== "SUPER_ADMIN")
+    throw new ApiError(
+      403,
+      "admin-role-required",
+      "Only super admins can view admin activity.",
+    );
+
+  try {
+    const connection = await pool.connect();
+    const activeSince = new Date(Date.now() - ADMIN_SESSION_ACTIVE_WINDOW_MS);
+    const result = await connection
+      .request()
+      .input("activeSince", sql.DateTime2, activeSince)
+      .query(`SELECT
+          CONVERT(nvarchar(36), SessionId) AS SessionId,
+          Username,
+          Role,
+          IpAddress,
+          DeviceLabel,
+          CreatedAt,
+          LastSeenAt,
+          ExpiresAt
+        FROM dbo.SmartRoomAdminSessions
+        WHERE RevokedAt IS NULL
+          AND ExpiresAt > SYSUTCDATETIME()
+          AND LastSeenAt >= @activeSince
+        ORDER BY LastSeenAt DESC, Username ASC;`);
+    const summaryResult = await connection.request()
+      .input("activeSince", sql.DateTime2, activeSince)
+      .query(`SELECT
+          (SELECT COUNT(*) FROM dbo.SmartRoomAdmins WHERE IsActive = 1) AS TotalAdminAccounts,
+          COUNT(DISTINCT Username) AS ActiveAdminCount,
+          COUNT(*) AS ActiveSessionCount,
+          COUNT(DISTINCT CASE
+            WHEN IpAddress IS NOT NULL AND IpAddress <> N'' AND IpAddress <> N'unknown'
+            THEN IpAddress END) AS UniqueIpCount
+        FROM dbo.SmartRoomAdminSessions
+        WHERE RevokedAt IS NULL
+          AND ExpiresAt > SYSUTCDATETIME()
+          AND LastSeenAt >= @activeSince;`);
+    const summary = summaryResult.recordset[0] || {};
+
+    return {
+      sessions: result.recordset.map((record) => ({
+        id: String(record.SessionId || ""),
+        username: String(record.Username || ""),
+        role: record.Role,
+        ipAddress: record.IpAddress || "unknown",
+        deviceLabel: record.DeviceLabel || "Unknown device",
+        createdAt: toIsoDate(record.CreatedAt),
+        lastSeenAt: toIsoDate(record.LastSeenAt),
+        expiresAt: toIsoDate(record.ExpiresAt),
+        isCurrent: Boolean(session.sid && record.SessionId === session.sid),
+      })),
+      summary: {
+        totalAdminAccounts: Number(summary.TotalAdminAccounts || 0),
+        activeAdminCount: Number(summary.ActiveAdminCount || 0),
+        activeSessionCount: Number(summary.ActiveSessionCount || 0),
+        uniqueIpCount: Number(summary.UniqueIpCount || 0),
+        activeWindowMinutes: ADMIN_SESSION_ACTIVE_WINDOW_MS / 60_000,
+      },
+    };
+  } catch (cause) {
+    throw new ApiError(
+      503,
+      "admin-activity-not-configured",
+      "Admin activity tracking is not configured. Run sql/010_admin_sessions.sql first.",
+    );
+  }
+}
+
 function limitAdminLogin(request, username) {
   const key = `${request.socket.remoteAddress || "unknown"}:${username}`;
   const cutoff = Date.now() - 15 * 60 * 1000;
@@ -315,13 +491,22 @@ async function loginAdmin(request, input) {
     role: account.Role,
     name: account.DisplayName || username,
   };
+  const sessionId = crypto.randomUUID();
+  const expiresAt = Date.now() + ADMIN_SESSION_TTL_MS;
+  const token = createSession(
+    { ...user, sessionVersion, sid: sessionId },
+    config.adminSessionSecret,
+    expiresAt,
+  );
+  await createAdminSessionActivity(
+    sessionId,
+    account,
+    request,
+    new Date(expiresAt),
+  );
   return {
     user,
-    token: createSession(
-      { ...user, sessionVersion },
-      config.adminSessionSecret,
-      Date.now() + 8 * 60 * 60 * 1000,
-    ),
+    token,
   };
 }
 
@@ -346,6 +531,7 @@ async function requireAdminSession(request) {
       "admin-session-required",
       "Please sign in to Admin again.",
     );
+  await touchAdminSession(session, request);
   return session;
 }
 
@@ -1888,37 +2074,45 @@ async function deleteSqlBooking(input) {
 async function listMascotAssignments() {
   const connection = await pool.connect();
   const result = await connection.request().query(
-    "SELECT Department, MascotId FROM dbo.MascotAssignments ORDER BY Department ASC;",
+    "SELECT Email, MascotId FROM dbo.MascotEmailAssignments ORDER BY Email ASC;",
   );
   return result.recordset.flatMap((record) => {
-    const department = typeof record.Department === "string" ? record.Department.trim().toUpperCase() : "";
+    let email = "";
+    try {
+      email = assertYageoEmail(record.Email, config.yageoDomain);
+    } catch {
+      return [];
+    }
     const mascotId = typeof record.MascotId === "string" ? record.MascotId.trim() : "";
-    return MASCOT_DEPARTMENTS.has(department) && MASCOT_IDS.has(mascotId) ? [{ department, mascotId }] : [];
+    return MASCOT_IDS.has(mascotId) ? [{ email, mascotId }] : [];
   });
 }
 
 async function saveMascotAssignment(input, username) {
-  const department = typeof input.department === "string" ? input.department.trim().toUpperCase() : "";
-  if (!MASCOT_DEPARTMENTS.has(department))
-    throw new ApiError(400, "invalid-mascot-department", "Department selection is invalid.");
+  let email = "";
+  try {
+    email = assertYageoEmail(input.email, config.yageoDomain);
+  } catch {
+    throw new ApiError(400, "invalid-mascot-email", "Enter a valid YAGEO email address.");
+  }
   const mascotId = input.mascotId;
   const connection = await pool.connect();
   if (mascotId === null || mascotId === undefined || mascotId === "") {
-    await connection.request().input("department", sql.NVarChar(40), department)
-      .query("DELETE FROM dbo.MascotAssignments WHERE Department = @department;");
-    return { department, mascotId: null, deleted: true };
+    await connection.request().input("email", sql.NVarChar(254), email)
+      .query("DELETE FROM dbo.MascotEmailAssignments WHERE Email = @email;");
+    return { email, mascotId: null, deleted: true };
   }
   if (typeof mascotId !== "string" || !MASCOT_IDS.has(mascotId))
     throw new ApiError(400, "invalid-mascot-id", "Mascot selection is invalid.");
   await connection.request()
-    .input("department", sql.NVarChar(40), department)
+    .input("email", sql.NVarChar(254), email)
     .input("mascotId", sql.NVarChar(40), mascotId)
     .input("username", sql.NVarChar(100), username)
-    .query(`MERGE dbo.MascotAssignments WITH (HOLDLOCK) AS target
-      USING (SELECT @department AS Department) AS source ON target.Department = source.Department
+    .query(`MERGE dbo.MascotEmailAssignments WITH (HOLDLOCK) AS target
+      USING (SELECT @email AS Email) AS source ON target.Email = source.Email
       WHEN MATCHED THEN UPDATE SET MascotId = @mascotId, UpdatedBy = @username, UpdatedAt = SYSUTCDATETIME()
-      WHEN NOT MATCHED THEN INSERT (Department, MascotId, UpdatedBy) VALUES (@department, @mascotId, @username);`);
-  return { department, mascotId, deleted: false };
+      WHEN NOT MATCHED THEN INSERT (Email, MascotId, UpdatedBy) VALUES (@email, @mascotId, @username);`);
+  return { email, mascotId, deleted: false };
 }
 
 async function runAdminTool(session, input) {
@@ -1971,7 +2165,7 @@ async function runAdminTool(session, input) {
     requireSuperAdmin();
     return deleteSqlBooking(payload);
   }
-  if (tool === "save_department_mascot_assignment") {
+  if (tool === "save_email_mascot_assignment") {
     requireSuperAdmin();
     return saveMascotAssignment(payload, session.username);
   }
@@ -2376,6 +2570,30 @@ const requestHandler = async (request, response) => {
         success: true,
         data: await loginAdmin(request, await body(request)),
       });
+    if (
+      request.method === "POST" &&
+      url.pathname === "/api/admin/session/heartbeat"
+    ) {
+      const session = await requireAdminSession(request);
+      return json(response, 200, {
+        success: true,
+        data: { lastSeenAt: new Date().toISOString(), username: session.username },
+      });
+    }
+    if (
+      request.method === "POST" &&
+      url.pathname === "/api/admin/session/logout"
+    ) {
+      const session = await requireAdminSession(request);
+      await revokeAdminSession(session);
+      return json(response, 200, { success: true, data: { revoked: true } });
+    }
+    if (request.method === "GET" && url.pathname === "/api/admin/sessions") {
+      return json(response, 200, {
+        success: true,
+        data: await listAdminSessions(await requireAdminSession(request)),
+      });
+    }
     if (request.method === "POST" && url.pathname === "/api/admin/tools")
       return json(response, 200, {
         success: true,

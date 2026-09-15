@@ -85,7 +85,7 @@ import {
 import {
   MascotAssignments,
   MascotId,
-  normalizeMascotDepartment,
+  normalizeMascotEmail,
 } from "./utils/mascots";
 
 type AppView = "grid" | "dashboard" | "leaderboard" | "admin";
@@ -464,21 +464,21 @@ const SmartRoomApplication: React.FC = () => {
   }, []);
 
   const saveMascotAssignment = async (
-    department: string,
+    email: string,
     mascotId: MascotId | null,
   ) => {
-    const normalizedDepartment = normalizeMascotDepartment(department);
-    if (!normalizedDepartment) throw new Error("Select a department.");
+    const normalizedEmail = normalizeMascotEmail(email);
+    if (!normalizedEmail) throw new Error("Enter a valid YAGEO email address.");
     if (!isPortableMailApiEnabled())
       throw new Error("Mascot assignments require the portable API.");
-    await runPortableAdminTool("save_department_mascot_assignment", {
-      department: normalizedDepartment,
+    await runPortableAdminTool("save_email_mascot_assignment", {
+      email: normalizedEmail,
       mascotId,
     });
     setMascotAssignments((current) => {
       const next = { ...current };
-      if (mascotId) next[normalizedDepartment] = mascotId;
-      else delete next[normalizedDepartment];
+      if (mascotId) next[normalizedEmail] = mascotId;
+      else delete next[normalizedEmail];
       return next;
     });
   };

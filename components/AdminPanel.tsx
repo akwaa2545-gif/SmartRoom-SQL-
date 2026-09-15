@@ -1,18 +1,18 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Announcement, AnnouncementAudience, AnnouncementCategory, Booking, Room, RoomType, BookingStatus, AdminUser, AdminRole, EmailSentHistoryRecord, EmailSentStatus } from '../types';
 import { INITIAL_ADMIN_USERS, DEPARTMENTS, BOOKING_START_HOUR, BOOKING_END_HOUR } from '../constants';
-import { Lock, Trash2, Search, Calendar, User, Clock, LayoutGrid, Edit, Plus, X, Save, Building2, IdCard, Check, XCircle, Shield, ShieldCheck, UserCog, LogIn, Upload, FileText, Flame, Sparkles, TrendingUp, Users, AlertCircle, BarChart2, Mail, RefreshCw, Download, BookOpen, Wrench, Send, Megaphone, Eye, Info, AlertTriangle, CheckCircle2, Bell } from 'lucide-react';
+import { Lock, Trash2, Search, Calendar, User, Clock, LayoutGrid, Edit, Plus, X, Save, Building2, IdCard, Check, XCircle, Shield, ShieldCheck, UserCog, LogIn, Upload, FileText, Flame, Sparkles, TrendingUp, Users, AlertCircle, BarChart2, Mail, RefreshCw, Download, BookOpen, Wrench, Send, Megaphone, Eye, Info, AlertTriangle, CheckCircle2, Bell, Activity, Monitor, Wifi } from 'lucide-react';
 import { TRANSLATIONS, formatDate, formatTimeRange, formatTimeString, translateText, translateAmenities, formatTimeValue, isRoomCurrentlyClosed, formatDepartment, getDepartmentSelectOptions } from '../translations';
 import ConfirmationModal from './ConfirmationModal';
 import { collection, onSnapshot, setDoc, doc } from 'firebase/firestore';
 import { signInAnonymously } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
-import { getPortableAdminEmailHistory, getPortableAdminPassword, isPortableMailApiEnabled, loginPortableAdmin, logoutPortableAdmin, runPortableAdminTool } from '../utils/portableMailApi';
+import { getPortableAdminEmailHistory, getPortableAdminPassword, getPortableAdminSessions, heartbeatPortableAdminSession, isPortableMailApiEnabled, loginPortableAdmin, logoutPortableAdmin, PortableAdminSessionsResponse, runPortableAdminTool } from '../utils/portableMailApi';
 import { db, auth, functions, handleFirestoreError, OperationType } from '../firebase';
 import { AdminGuideModal } from './admin/AdminGuideModal';
 import { EditBookingModal } from './admin/EditBookingModal';
 import { getBookingDepartmentBadgeClass, getBookingDepartmentClassForState, getBookingDepartmentDotClass } from '../bookingVisualStyles';
-import { MASCOT_OPTIONS, MascotAssignments, MascotId, getMascotOption, normalizeMascotDepartment } from '../utils/mascots';
+import { MASCOT_OPTIONS, MascotAssignments, MascotId, getMascotOption, normalizeMascotEmail } from '../utils/mascots';
 
 export const CLOSURE_REASONS = [
   { key: 'Renovation', labelEn: 'Renovation', labelTh: 'ปิดปรับปรุงชั่วคราว' },
@@ -156,12 +156,12 @@ interface AdminPanelProps {
   onLoginSuccess?: () => void;
   onVerifyBooking?: (id: string) => void;
   mascotAssignments?: MascotAssignments;
-  onSaveMascotAssignment?: (department: string, mascotId: MascotId | null) => Promise<void>;
+  onSaveMascotAssignment?: (email: string, mascotId: MascotId | null) => Promise<void>;
 }
 
 type AdminBookingDisplayState = 'pending' | 'waitForVerify' | 'verified' | 'roomInUse' | 'used' | 'confirmed' | 'rejected' | 'noCheckIn';
 type EmailHistoryVerificationStatus = 'pendingSend' | 'waitForVerify' | 'notVerified' | 'verified' | 'na';
-type AdminTab = 'bookings' | 'rooms' | 'users' | 'analytics' | 'emails' | 'tools' | 'announcements' | 'mascots';
+type AdminTab = 'bookings' | 'rooms' | 'users' | 'sessions' | 'analytics' | 'emails' | 'tools' | 'announcements' | 'mascots';
 type TransactionStatusFilter = 'all' | 'upcoming' | 'used' | 'cancelled';
 type InternalBookingTarget = 'single' | 'all';
 type InternalBookingStatus = BookingStatus.CONFIRMED | BookingStatus.VERIFIED | BookingStatus.NO_SHOW;
@@ -393,6 +393,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // Data State with Firebase Persistence
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
+  const [adminSessionsData, setAdminSessionsData] = useState<PortableAdminSessionsResponse | null>(null);
+  const [isAdminSessionsLoading, setIsAdminSessionsLoading] = useState(false);
+  const [adminSessionsError, setAdminSessionsError] = useState('');
   const [emailHistory, setEmailHistory] = useState<EmailSentHistoryRecord[]>([]);
   const [isEmailHistoryLoading, setIsEmailHistoryLoading] = useState(false);
   const [emailHistoryError, setEmailHistoryError] = useState('');
@@ -446,8 +449,51 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     return () => unsubscribe();
   }, [currentUser]);
 
+  const loadAdminSessions = async () => {
+    if (!currentUser || currentUser.role !== 'SUPER_ADMIN' || !isPortableMailApiEnabled()) return;
+    setIsAdminSessionsLoading(true);
+    setAdminSessionsError('');
+    try {
+      const data = await getPortableAdminSessions();
+      setAdminSessionsData(data);
+    } catch (error) {
+      setAdminSessionsError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsAdminSessionsLoading(false);
+    }
+  };
+
+  // Keep the current SQL-backed admin session visible as active while the page is open.
+  useEffect(() => {
+    if (!currentUser || !isPortableMailApiEnabled()) return;
+    const sendHeartbeat = () => {
+      void heartbeatPortableAdminSession().catch((error) => {
+        console.warn('Admin session heartbeat failed:', error);
+      });
+    };
+    sendHeartbeat();
+    const timer = window.setInterval(sendHeartbeat, 60_000);
+    return () => window.clearInterval(timer);
+  }, [currentUser?.id, currentUser?.role]);
+
   // UI State
   const [activeTab, setActiveTab] = useState<AdminTab>('analytics');
+
+  // Super Admins get a periodically refreshed view of active admin sessions.
+  useEffect(() => {
+    if (
+      !currentUser ||
+      currentUser.role !== 'SUPER_ADMIN' ||
+      activeTab !== 'sessions' ||
+      !isPortableMailApiEnabled()
+    ) return;
+    void loadAdminSessions();
+    const timer = window.setInterval(() => {
+      void loadAdminSessions();
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [activeTab, currentUser?.id, currentUser?.role]);
+
   const [internalTestEmail, setInternalTestEmail] = useState('');
   const [isSendingInternalTestEmail, setIsSendingInternalTestEmail] = useState(false);
   const [internalBookingTarget, setInternalBookingTarget] = useState<InternalBookingTarget>('single');
@@ -489,7 +535,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     onConfirm: () => { },
   });
   const [searchTerm, setSearchTerm] = useState('');
-  const [mascotDepartment, setMascotDepartment] = useState(DEPARTMENTS[0]);
+  const [mascotEmail, setMascotEmail] = useState('');
   const [mascotId, setMascotId] = useState<MascotId>('king-cat');
   const [isSavingMascot, setIsSavingMascot] = useState(false);
   const [transactionStatusFilter, setTransactionStatusFilter] = useState<TransactionStatusFilter>('all');
@@ -1623,9 +1669,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     });
   };
 
-  const persistMascotAssignment = async (department: string, selectedMascotId: MascotId | null) => {
+  const persistMascotAssignment = async (email: string, selectedMascotId: MascotId | null) => {
     if (onSaveMascotAssignment) {
-      await onSaveMascotAssignment(department, selectedMascotId);
+      await onSaveMascotAssignment(email, selectedMascotId);
       return;
     }
 
@@ -1633,21 +1679,21 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       throw new Error('Mascot assignments require the portable API.');
     }
 
-    await runPortableAdminTool('save_department_mascot_assignment', {
-      department,
+    await runPortableAdminTool('save_email_mascot_assignment', {
+      email,
       mascotId: selectedMascotId,
     });
   };
 
   const handleSaveMascotAssignment = async () => {
-    const department = normalizeMascotDepartment(mascotDepartment);
-    if (!department) {
-      showNotification('Select a department.', 'error');
+    const email = normalizeMascotEmail(mascotEmail);
+    if (!email) {
+      showNotification('Enter a valid YAGEO email address.', 'error');
       return;
     }
     try {
       setIsSavingMascot(true);
-      await persistMascotAssignment(department, mascotId);
+      await persistMascotAssignment(email, mascotId);
       showNotification('Mascot assignment saved.', 'success');
     } catch (error) {
       showNotification(`Mascot assignment failed: ${error instanceof Error ? error.message : String(error)}`, 'error');
@@ -2251,7 +2297,158 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
             {t.userMgmtTab}
           </button>
         )}
+
+        {currentUser.role === 'SUPER_ADMIN' && (
+          <button
+            onClick={() => setActiveTab('sessions')}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center whitespace-nowrap ${activeTab === 'sessions' ? 'bg-brand-50 text-brand-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}
+          >
+            <Activity className="w-4 h-4 mr-2" />
+            {language === 'th' ? 'การใช้งานแอดมิน' : 'Admin Activity'}
+          </button>
+        )}
       </div>
+
+      {activeTab === 'sessions' && currentUser.role === 'SUPER_ADMIN' && (
+        <div className="space-y-6 animate-in fade-in zoom-in-95 duration-200">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="flex items-center text-lg font-black text-slate-900">
+                  <Activity className="mr-2 h-5 w-5 text-brand-500" />
+                  {language === 'th' ? 'การใช้งานแอดมิน' : 'Admin Activity'}
+                </h2>
+                <p className="mt-1 text-sm font-medium text-slate-500">
+                  {language === 'th'
+                    ? 'ตรวจสอบแอดมินที่กำลังใช้งานจากเซสชัน อุปกรณ์ และเครือข่าย'
+                    : 'See which admin sessions are currently active by account, device, and network.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void loadAdminSessions()}
+                disabled={isAdminSessionsLoading || !isPortableMailApiEnabled()}
+                className="inline-flex items-center justify-center rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700 transition-colors hover:border-brand-300 hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <RefreshCw className={`mr-2 h-4 w-4 ${isAdminSessionsLoading ? 'animate-spin' : ''}`} />
+                {language === 'th' ? 'รีเฟรช' : 'Refresh'}
+              </button>
+            </div>
+          </div>
+
+          {!isPortableMailApiEnabled() ? (
+            <>
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <span className="text-sm font-bold text-slate-500">{language === 'th' ? 'บัญชีแอดมินที่ตั้งค่าไว้' : 'Configured admin accounts'}</span>
+                <p className="mt-2 text-3xl font-black text-slate-900">{adminUsers.length}</p>
+              </div>
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm font-semibold text-amber-900">
+                {language === 'th'
+                  ? 'การติดตามอุปกรณ์และ IP ต้องใช้ Portable API เนื่องจากเบราว์เซอร์ไม่สามารถอ่าน IP ของผู้ใช้อื่นได้อย่างปลอดภัย โหมด Firebase จะแสดงเฉพาะจำนวนและรายชื่อแอดมินที่ตั้งค่าไว้'
+                  : 'Device and IP tracking requires the Portable API because a browser cannot safely read another user’s IP. Firebase mode shows the configured admin count and account list, but not live devices or IPs.'}
+              </div>
+            </>
+          ) : (
+            <>
+              {adminSessionsError && (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-sm font-semibold text-rose-800">
+                  {adminSessionsError}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                {[
+                  {
+                    label: language === 'th' ? 'บัญชีแอดมินทั้งหมด' : 'Admin accounts',
+                    value: adminSessionsData?.summary.totalAdminAccounts ?? '—',
+                    icon: Users,
+                    tone: 'text-indigo-500',
+                  },
+                  {
+                    label: language === 'th' ? 'แอดมินที่ออนไลน์' : 'Admins online',
+                    value: adminSessionsData?.summary.activeAdminCount ?? '—',
+                    icon: ShieldCheck,
+                    tone: 'text-emerald-500',
+                  },
+                  {
+                    label: language === 'th' ? 'เซสชัน/อุปกรณ์ที่ใช้งาน' : 'Active sessions / devices',
+                    value: adminSessionsData?.summary.activeSessionCount ?? '—',
+                    icon: Monitor,
+                    tone: 'text-brand-500',
+                  },
+                  {
+                    label: language === 'th' ? 'IP ที่ไม่ซ้ำกัน' : 'Unique IP addresses',
+                    value: adminSessionsData?.summary.uniqueIpCount ?? '—',
+                    icon: Wifi,
+                    tone: 'text-amber-500',
+                  },
+                ].map(({ label, value, icon: Icon, tone }) => (
+                  <div key={label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-bold text-slate-500">{label}</span>
+                      <Icon className={`h-5 w-5 ${tone}`} />
+                    </div>
+                    <p className="mt-2 text-3xl font-black text-slate-900">{value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm font-medium leading-6 text-sky-900">
+                {language === 'th'
+                  ? `สถานะออนไลน์หมายถึงเซสชันส่งสัญญาณภายใน ${adminSessionsData?.summary.activeWindowMinutes || 5} นาทีล่าสุด IP ใช้ระบุการเชื่อมต่อเครือข่าย ไม่ใช่ตัวตนของบุคคล และหลายคนอาจใช้ IP เดียวกันได้`
+                  : `Online means the session checked in within the last ${adminSessionsData?.summary.activeWindowMinutes || 5} minutes. An IP identifies a network connection, not a person; multiple admins can share one IP.`}
+              </div>
+
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-200 p-4">
+                  <h3 className="font-bold text-slate-900">{language === 'th' ? 'เซสชันแอดมินที่ใช้งานอยู่' : 'Active admin sessions'}</h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[760px] text-left text-sm">
+                    <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500">
+                      <tr>
+                        <th className="px-5 py-3">{language === 'th' ? 'แอดมิน' : 'Admin'}</th>
+                        <th className="px-5 py-3">{language === 'th' ? 'อุปกรณ์' : 'Device'}</th>
+                        <th className="px-5 py-3">IP address</th>
+                        <th className="px-5 py-3">{language === 'th' ? 'ใช้งานล่าสุด' : 'Last seen'}</th>
+                        <th className="px-5 py-3">{language === 'th' ? 'สถานะ' : 'Status'}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {adminSessionsData?.sessions.length ? adminSessionsData.sessions.map((session) => (
+                        <tr key={session.id} className="hover:bg-slate-50">
+                          <td className="px-5 py-4">
+                            <div className="font-bold text-slate-900">{session.username}</div>
+                            <div className="mt-1 text-xs font-semibold text-slate-500">
+                              {session.role === 'SUPER_ADMIN' ? t.superAdmin : t.approver}
+                              {session.isCurrent && <span className="ml-2 rounded-full bg-brand-100 px-2 py-0.5 text-brand-700">{language === 'th' ? 'เบราว์เซอร์นี้' : 'This browser'}</span>}
+                            </div>
+                          </td>
+                          <td className="px-5 py-4 font-semibold text-slate-700">{session.deviceLabel || (language === 'th' ? 'ไม่ทราบอุปกรณ์' : 'Unknown device')}</td>
+                          <td className="px-5 py-4 font-mono text-xs font-semibold text-slate-700">{session.ipAddress || 'unknown'}</td>
+                          <td className="px-5 py-4 font-medium text-slate-600">{session.lastSeenAt ? new Date(session.lastSeenAt).toLocaleString(language === 'th' ? 'th-TH' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' }) : '—'}</td>
+                          <td className="px-5 py-4">
+                            <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
+                              <span className="mr-1.5 h-2 w-2 rounded-full bg-emerald-500" />
+                              {language === 'th' ? 'ออนไลน์' : 'Active'}
+                            </span>
+                          </td>
+                        </tr>
+                      )) : (
+                        <tr>
+                          <td colSpan={5} className="px-5 py-10 text-center font-semibold text-slate-400">
+                            {isAdminSessionsLoading ? (language === 'th' ? 'กำลังโหลด...' : 'Loading...') : (language === 'th' ? 'ไม่พบเซสชันแอดมินที่ใช้งานอยู่' : 'No active admin sessions.')}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {activeTab === 'bookings' && (
         <>
@@ -3174,15 +3371,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         <div className="space-y-6 animate-in fade-in zoom-in-95 duration-200">
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="flex items-center text-lg font-black text-slate-900"><Sparkles className="mr-2 h-5 w-5 text-amber-500" />Mascot Rewards</h2>
-            <p className="mt-1 text-sm font-medium text-slate-500">Assign one of 10 animated mascots to any department. The mascot appears on every booking from that department.</p>
+            <p className="mt-1 text-sm font-medium text-slate-500">Assign one of 10 animated mascots to an individual YAGEO email address. The mascot appears on that user&apos;s bookings.</p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <div>
-                <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500">Department</label>
-                <select value={mascotDepartment} onChange={(event) => setMascotDepartment(event.target.value)} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500">
-                  {getDepartmentSelectOptions(DEPARTMENTS).map(({ label }) => <option key={label} value={label}>{label}</option>)}
-                </select>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500">YAGEO email</label>
+                <input type="email" value={mascotEmail} onChange={(event) => setMascotEmail(event.target.value)} placeholder="firstname.lastname@yageo.com" className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500" />
               </div>
               <div>
                 <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500">Animated mascot</label>
@@ -3202,10 +3397,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-200 p-4"><h3 className="font-bold text-slate-900">Current assignments</h3><span className="text-xs font-bold text-slate-400">{Object.keys(mascotAssignments).length} assigned</span></div>
-            <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500"><tr><th className="px-5 py-3">Department</th><th className="px-5 py-3">Mascot</th><th className="px-5 py-3 text-right">Action</th></tr></thead><tbody className="divide-y divide-slate-100">
-              {Object.entries(mascotAssignments).length === 0 ? <tr><td colSpan={3} className="px-5 py-8 text-center text-sm font-semibold text-slate-400">No mascot assignments yet.</td></tr> : Object.entries(mascotAssignments).map(([department, assignedMascot]) => {
+            <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500"><tr><th className="px-5 py-3">Email</th><th className="px-5 py-3">Mascot</th><th className="px-5 py-3 text-right">Action</th></tr></thead><tbody className="divide-y divide-slate-100">
+              {Object.entries(mascotAssignments).length === 0 ? <tr><td colSpan={3} className="px-5 py-8 text-center text-sm font-semibold text-slate-400">No mascot assignments yet.</td></tr> : Object.entries(mascotAssignments).map(([email, assignedMascot]) => {
                 const mascot = getMascotOption(assignedMascot);
-                return <tr key={department}><td className="px-5 py-4 font-semibold text-slate-700">{formatDepartment(department)}</td><td className="px-5 py-4 font-bold text-slate-800">{mascot?.emoji} {mascot?.label || assignedMascot}</td><td className="px-5 py-4 text-right"><button type="button" onClick={() => { setMascotDepartment(department); setMascotId(assignedMascot); }} className="rounded-lg px-3 py-1.5 text-xs font-bold text-brand-600 hover:bg-brand-50">Edit</button><button type="button" disabled={isSavingMascot} onClick={async () => { try { setIsSavingMascot(true); await persistMascotAssignment(department, null); showNotification('Mascot assignment removed.', 'success'); } catch (error) { showNotification(`Could not remove mascot: ${error instanceof Error ? error.message : String(error)}`, 'error'); } finally { setIsSavingMascot(false); } }} className="ml-2 rounded-lg px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50">Remove</button></td></tr>;
+                return <tr key={email}><td className="px-5 py-4 font-semibold text-slate-700">{email}</td><td className="px-5 py-4 font-bold text-slate-800">{mascot?.emoji} {mascot?.label || assignedMascot}</td><td className="px-5 py-4 text-right"><button type="button" onClick={() => { setMascotEmail(email); setMascotId(assignedMascot); }} className="rounded-lg px-3 py-1.5 text-xs font-bold text-brand-600 hover:bg-brand-50">Edit</button><button type="button" disabled={isSavingMascot} onClick={async () => { try { setIsSavingMascot(true); await persistMascotAssignment(email, null); showNotification('Mascot assignment removed.', 'success'); } catch (error) { showNotification(`Could not remove mascot: ${error instanceof Error ? error.message : String(error)}`, 'error'); } finally { setIsSavingMascot(false); } }} className="ml-2 rounded-lg px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50">Remove</button></td></tr>;
               })}
             </tbody></table></div>
           </div>
