@@ -7,7 +7,7 @@ import ConfirmationModal from './ConfirmationModal';
 import { collection, onSnapshot, setDoc, doc } from 'firebase/firestore';
 import { signInAnonymously } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
-import { getPortableAdminEmailHistory, getPortableAdminPassword, getPortableAdminSessions, heartbeatPortableAdminSession, isPortableMailApiEnabled, loginPortableAdmin, logoutPortableAdmin, PortableAdminSessionsResponse, PortableMailboxUser, runPortableAdminTool, searchPortableMailboxes } from '../utils/portableMailApi';
+import { getPortableAdminEmailHistory, getPortableAdminMascotAssignments, getPortableAdminPassword, getPortableAdminSessions, heartbeatPortableAdminSession, isPortableMailApiEnabled, loginPortableAdmin, logoutPortableAdmin, PortableAdminMascotAssignment, PortableAdminSessionsResponse, PortableMailboxUser, runPortableAdminTool, searchPortableMailboxes } from '../utils/portableMailApi';
 import { db, auth, functions, handleFirestoreError, OperationType } from '../firebase';
 import { AdminGuideModal } from './admin/AdminGuideModal';
 import { EditBookingModal } from './admin/EditBookingModal';
@@ -396,6 +396,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const [adminSessionsData, setAdminSessionsData] = useState<PortableAdminSessionsResponse | null>(null);
   const [isAdminSessionsLoading, setIsAdminSessionsLoading] = useState(false);
   const [adminSessionsError, setAdminSessionsError] = useState('');
+  const [adminMascotAssignments, setAdminMascotAssignments] = useState<PortableAdminMascotAssignment[]>([]);
+  const [isAdminMascotAssignmentsLoading, setIsAdminMascotAssignmentsLoading] = useState(false);
+  const [adminMascotAssignmentsError, setAdminMascotAssignmentsError] = useState('');
   const [emailHistory, setEmailHistory] = useState<EmailSentHistoryRecord[]>([]);
   const [isEmailHistoryLoading, setIsEmailHistoryLoading] = useState(false);
   const [emailHistoryError, setEmailHistoryError] = useState('');
@@ -463,6 +466,22 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
+  const loadAdminMascotAssignments = async () => {
+    if (!currentUser || currentUser.role !== 'SUPER_ADMIN' || !isPortableMailApiEnabled()) return;
+    setIsAdminMascotAssignmentsLoading(true);
+    setAdminMascotAssignmentsError('');
+    try {
+      const data = await getPortableAdminMascotAssignments();
+      setAdminMascotAssignments(Array.isArray(data.assignments) ? data.assignments : []);
+    } catch (error) {
+      setAdminMascotAssignmentsError(error instanceof Error ? error.message : String(error));
+      const fallbackAssignments = Object.entries(mascotAssignments).map(([email, mascotId]) => ({ email, mascotId }));
+      setAdminMascotAssignments(fallbackAssignments);
+    } finally {
+      setIsAdminMascotAssignmentsLoading(false);
+    }
+  };
+
   // Keep the current SQL-backed admin session visible as active while the page is open.
   useEffect(() => {
     if (!currentUser || !isPortableMailApiEnabled()) return;
@@ -492,6 +511,16 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       void loadAdminSessions();
     }, 30_000);
     return () => window.clearInterval(timer);
+  }, [activeTab, currentUser?.id, currentUser?.role]);
+
+  useEffect(() => {
+    if (
+      !currentUser ||
+      currentUser.role !== 'SUPER_ADMIN' ||
+      activeTab !== 'mascots' ||
+      !isPortableMailApiEnabled()
+    ) return;
+    void loadAdminMascotAssignments();
   }, [activeTab, currentUser?.id, currentUser?.role]);
 
   const [internalTestEmail, setInternalTestEmail] = useState('');
@@ -1787,6 +1816,20 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     });
   };
 
+  const updateAdminMascotAssignment = (email: string, selectedMascotId: MascotId | null) => {
+    setAdminMascotAssignments((current) => {
+      if (!selectedMascotId) return current.filter((assignment) => assignment.email !== email);
+      const nextAssignment: PortableAdminMascotAssignment = {
+        email,
+        mascotId: selectedMascotId,
+        updatedBy: currentUser?.username || '',
+        updatedAt: new Date().toISOString(),
+      };
+      return [...current.filter((assignment) => assignment.email !== email), nextAssignment]
+        .sort((a, b) => a.email.localeCompare(b.email));
+    });
+  };
+
   const handleSaveMascotAssignment = async () => {
     const email = normalizeMascotEmail(mascotEmail);
     if (!email) {
@@ -1796,9 +1839,23 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     try {
       setIsSavingMascot(true);
       await persistMascotAssignment(email, mascotId);
+      updateAdminMascotAssignment(email, mascotId);
       showNotification('Mascot assignment saved.', 'success');
     } catch (error) {
       showNotification(`Mascot assignment failed: ${error instanceof Error ? error.message : String(error)}`, 'error');
+    } finally {
+      setIsSavingMascot(false);
+    }
+  };
+
+  const handleRemoveMascotAssignment = async (email: string) => {
+    try {
+      setIsSavingMascot(true);
+      await persistMascotAssignment(email, null);
+      updateAdminMascotAssignment(email, null);
+      showNotification('Mascot assignment removed.', 'success');
+    } catch (error) {
+      showNotification(`Could not remove mascot: ${error instanceof Error ? error.message : String(error)}`, 'error');
     } finally {
       setIsSavingMascot(false);
     }
@@ -3584,6 +3641,23 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                     )}
                   </div>
                 )}
+                {selectedMascotMailbox && (
+                  <div className="mt-2 flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5">
+                    <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-emerald-600 text-[11px] font-black text-white">
+                      {getInternalTestMailboxInitials(selectedMascotMailbox)}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-black text-emerald-950">Selected: {selectedMascotMailbox.displayName || mascotEmail}</span>
+                      <span className="block truncate text-xs font-semibold text-emerald-800">{mascotEmail}</span>
+                      {getInternalTestMailboxRoleLine(selectedMascotMailbox) && (
+                        <span className="block truncate text-[11px] font-bold uppercase tracking-wide text-emerald-700">{getInternalTestMailboxRoleLine(selectedMascotMailbox)}</span>
+                      )}
+                    </span>
+                    <button type="button" onClick={() => { setSelectedMascotMailbox(null); setMascotEmail(''); }} className="rounded-lg p-1 text-emerald-700 hover:bg-emerald-100" title="Clear selected mailbox" aria-label="Clear selected mailbox">
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
                 <p className="mt-1 text-[11px] font-medium text-slate-400">Search by name or email, then select a mailbox before assigning.</p>
               </div>
               <div>
@@ -3603,13 +3677,50 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
           </div>
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="flex items-center justify-between border-b border-slate-200 p-4"><h3 className="font-bold text-slate-900">Current assignments</h3><span className="text-xs font-bold text-slate-400">{Object.keys(mascotAssignments).length} assigned</span></div>
-            <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500"><tr><th className="px-5 py-3">Email</th><th className="px-5 py-3">Mascot</th><th className="px-5 py-3 text-right">Action</th></tr></thead><tbody className="divide-y divide-slate-100">
-              {Object.entries(mascotAssignments).length === 0 ? <tr><td colSpan={3} className="px-5 py-8 text-center text-sm font-semibold text-slate-400">No mascot assignments yet.</td></tr> : Object.entries(mascotAssignments).map(([email, assignedMascot]) => {
-                const mascot = getMascotOption(assignedMascot);
-                return <tr key={email}><td className="px-5 py-4 font-semibold text-slate-700">{email}</td><td className="px-5 py-4 font-bold text-slate-800">{mascot?.emoji} {mascot?.label || assignedMascot}</td><td className="px-5 py-4 text-right"><button type="button" onClick={() => { setMascotEmail(email); setMascotId(assignedMascot); }} className="rounded-lg px-3 py-1.5 text-xs font-bold text-brand-600 hover:bg-brand-50">Edit</button><button type="button" disabled={isSavingMascot} onClick={async () => { try { setIsSavingMascot(true); await persistMascotAssignment(email, null); showNotification('Mascot assignment removed.', 'success'); } catch (error) { showNotification(`Could not remove mascot: ${error instanceof Error ? error.message : String(error)}`, 'error'); } finally { setIsSavingMascot(false); } }} className="ml-2 rounded-lg px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50">Remove</button></td></tr>;
-              })}
-            </tbody></table></div>
+            <div className="flex items-center justify-between border-b border-slate-200 p-4">
+              <h3 className="font-bold text-slate-900">Current assignments</h3>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-400">{adminMascotAssignments.length} assigned</span>
+                <button type="button" onClick={() => void loadAdminMascotAssignments()} disabled={isAdminMascotAssignmentsLoading} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 disabled:cursor-wait disabled:opacity-50" title="Refresh mascot assignments" aria-label="Refresh mascot assignments">
+                  <RefreshCw className={`h-4 w-4 ${isAdminMascotAssignmentsLoading ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+            </div>
+            {adminMascotAssignmentsError && (
+              <div className="border-b border-amber-200 bg-amber-50 px-5 py-3 text-xs font-semibold text-amber-800">
+                Could not refresh assignments: {adminMascotAssignmentsError}
+              </div>
+            )}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500">
+                  <tr><th className="px-5 py-3">User email</th><th className="px-5 py-3">Mascot</th><th className="px-5 py-3">Assigned by</th><th className="px-5 py-3 text-right">Action</th></tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {isAdminMascotAssignmentsLoading && adminMascotAssignments.length === 0 ? (
+                    <tr><td colSpan={4} className="px-5 py-8 text-center text-sm font-semibold text-slate-400">Loading current assignments...</td></tr>
+                  ) : adminMascotAssignments.length === 0 ? (
+                    <tr><td colSpan={4} className="px-5 py-8 text-center text-sm font-semibold text-slate-400">No mascot assignments yet.</td></tr>
+                  ) : adminMascotAssignments.map((assignment) => {
+                    const mascot = getMascotOption(assignment.mascotId);
+                    return (
+                      <tr key={assignment.email}>
+                        <td className="px-5 py-4 font-semibold text-slate-700">{assignment.email}</td>
+                        <td className="px-5 py-4 font-bold text-slate-800">{mascot?.emoji} {mascot?.label || assignment.mascotId}</td>
+                        <td className="px-5 py-4 text-xs font-semibold text-slate-500">
+                          <div>{assignment.updatedBy || '-'}</div>
+                          {assignment.updatedAt && <div className="mt-0.5 text-[11px] text-slate-400">{new Date(assignment.updatedAt).toLocaleString()}</div>}
+                        </td>
+                        <td className="px-5 py-4 text-right whitespace-nowrap">
+                          <button type="button" onClick={() => { setSelectedMascotMailbox(null); setMascotEmail(assignment.email); setMascotId(assignment.mascotId as MascotId); }} className="rounded-lg px-3 py-1.5 text-xs font-bold text-brand-600 hover:bg-brand-50">Edit</button>
+                          <button type="button" disabled={isSavingMascot} onClick={() => void handleRemoveMascotAssignment(assignment.email)} className="ml-2 rounded-lg px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50">Remove</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

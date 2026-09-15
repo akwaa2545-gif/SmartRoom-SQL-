@@ -171,6 +171,13 @@ export interface PortableMailboxUser {
   jobTitle?: string;
 }
 
+export interface PortableAdminMascotAssignment {
+  email: string;
+  mascotId: string;
+  updatedBy?: string;
+  updatedAt?: string | null;
+}
+
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const user = auth.currentUser || (await signInAnonymously(auth)).user;
   const token = await user.getIdToken();
@@ -265,6 +272,7 @@ const requestPortableAdmin = async <T>(path: string, init?: RequestInit): Promis
 
 export const getPortableAdminSessions = () => requestPortableAdmin<PortableAdminSessionsResponse>('/api/admin/sessions');
 export const heartbeatPortableAdminSession = () => requestPortableAdmin<{ lastSeenAt?: string; username?: string }>('/api/admin/session/heartbeat', { method: 'POST' });
+export const getPortableAdminMascotAssignments = () => requestPortableAdmin<{ assignments?: PortableAdminMascotAssignment[] }>('/api/admin/mascot-assignments');
 
 export const runPortableAdminTool = async <T>(tool: string, payload: Record<string, unknown>) => {
   if (!adminSessionToken) throw new Error('Please sign in to Admin again.');

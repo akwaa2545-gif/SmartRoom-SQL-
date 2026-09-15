@@ -2109,6 +2109,29 @@ async function listMascotAssignments() {
   });
 }
 
+async function listAdminMascotAssignments() {
+  const connection = await pool.connect();
+  const result = await connection.request().query(
+    "SELECT Email, MascotId, UpdatedBy, UpdatedAt FROM dbo.MascotEmailAssignments ORDER BY Email ASC;",
+  );
+  return result.recordset.flatMap((record) => {
+    let email = "";
+    try {
+      email = assertYageoEmail(record.Email, config.yageoDomain);
+    } catch {
+      return [];
+    }
+    const mascotId = typeof record.MascotId === "string" ? record.MascotId.trim() : "";
+    if (!MASCOT_IDS.has(mascotId)) return [];
+    return [{
+      email,
+      mascotId,
+      updatedBy: typeof record.UpdatedBy === "string" ? record.UpdatedBy : "",
+      updatedAt: record.UpdatedAt ? new Date(record.UpdatedAt).toISOString() : null,
+    }];
+  });
+}
+
 async function saveMascotAssignment(input, username) {
   let email = "";
   try {
@@ -2634,6 +2657,22 @@ const requestHandler = async (request, response) => {
       return json(response, 200, {
         success: true,
         data: { history: await listAdminEmailHistory(requestedLimit) },
+      });
+    }
+    if (
+      request.method === "GET" &&
+      url.pathname === "/api/admin/mascot-assignments"
+    ) {
+      const session = await requireAdminSession(request);
+      if (session.role !== "SUPER_ADMIN")
+        throw new ApiError(
+          403,
+          "admin-role-required",
+          "Only super admins can view mascot assignments.",
+        );
+      return json(response, 200, {
+        success: true,
+        data: { assignments: await listAdminMascotAssignments() },
       });
     }
     if (request.method === "GET" && url.pathname === "/api/mailboxes") {
