@@ -510,6 +510,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const [bookingRepairResult, setBookingRepairResult] = useState<BookingRepairResult | null>(null);
   const [isScanningBookingRepair, setIsScanningBookingRepair] = useState(false);
   const [isRepairingBookingData, setIsRepairingBookingData] = useState(false);
+  const [mascotEmail, setMascotEmail] = useState('');
+  const [mascotEmailSuggestions, setMascotEmailSuggestions] = useState<PortableMailboxUser[]>([]);
+  const [selectedMascotMailbox, setSelectedMascotMailbox] = useState<PortableMailboxUser | null>(null);
+  const [isMascotEmailLookupLoading, setIsMascotEmailLookupLoading] = useState(false);
+  const [isMascotEmailSuggestionsOpen, setIsMascotEmailSuggestionsOpen] = useState(false);
+  const mascotEmailLookupRequestIdRef = useRef(0);
 
   useEffect(() => {
     const query = internalTestEmail.trim();
@@ -557,6 +563,52 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     return () => window.clearTimeout(timeout);
   }, [internalTestEmail, selectedInternalTestMailbox]);
 
+  useEffect(() => {
+    const query = mascotEmail.trim();
+    const requestId = mascotEmailLookupRequestIdRef.current + 1;
+    mascotEmailLookupRequestIdRef.current = requestId;
+    const selectedMailbox = (selectedMascotMailbox?.mail || selectedMascotMailbox?.userPrincipalName || '').trim().toLowerCase();
+
+    if (selectedMailbox && selectedMailbox === query.toLowerCase()) {
+      setMascotEmailSuggestions([]);
+      setIsMascotEmailLookupLoading(false);
+      setIsMascotEmailSuggestionsOpen(false);
+      return;
+    }
+
+    if (query.length < 2) {
+      setMascotEmailSuggestions([]);
+      setIsMascotEmailLookupLoading(false);
+      setIsMascotEmailSuggestionsOpen(false);
+      return;
+    }
+
+    const timeout = window.setTimeout(async () => {
+      setIsMascotEmailLookupLoading(true);
+      try {
+        const response = isPortableMailApiEnabled()
+          ? { data: await searchPortableMailboxes(query) }
+          : await httpsCallable(functions, 'searchYageoMailboxes')({ query });
+        if (mascotEmailLookupRequestIdRef.current !== requestId) return;
+
+        const data = response.data as { users?: PortableMailboxUser[] };
+        setMascotEmailSuggestions(Array.isArray(data.users) ? data.users : []);
+        setIsMascotEmailSuggestionsOpen(true);
+      } catch (error) {
+        if (mascotEmailLookupRequestIdRef.current !== requestId) return;
+        console.error('Admin mascot mailbox search failed:', error);
+        setMascotEmailSuggestions([]);
+        setIsMascotEmailSuggestionsOpen(true);
+      } finally {
+        if (mascotEmailLookupRequestIdRef.current === requestId) {
+          setIsMascotEmailLookupLoading(false);
+        }
+      }
+    }, 350);
+
+    return () => window.clearTimeout(timeout);
+  }, [mascotEmail, selectedMascotMailbox]);
+
   const sortedRooms = useMemo(() => {
     const order: Record<string, number> = {
       [RoomType.MEETING]: 1,
@@ -586,7 +638,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     onConfirm: () => { },
   });
   const [searchTerm, setSearchTerm] = useState('');
-  const [mascotEmail, setMascotEmail] = useState('');
   const [mascotId, setMascotId] = useState<MascotId>('king-cat');
   const [isSavingMascot, setIsSavingMascot] = useState(false);
   const [transactionStatusFilter, setTransactionStatusFilter] = useState<TransactionStatusFilter>('all');
@@ -1997,6 +2048,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     setInternalTestEmail(selectedEmail);
     setInternalTestEmailSuggestions([]);
     setIsInternalTestEmailSuggestionsOpen(false);
+  };
+
+  const handleSelectMascotMailbox = (user: PortableMailboxUser) => {
+    const selectedEmail = getInternalTestMailboxEmail(user);
+    if (!selectedEmail) return;
+    setSelectedMascotMailbox(user);
+    setMascotEmail(selectedEmail);
+    setMascotEmailSuggestions([]);
+    setIsMascotEmailSuggestionsOpen(false);
   };
 
   const handleSendInternalTestEmail = async (event: React.FormEvent) => {
@@ -3456,9 +3516,75 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <div>
+              <div className="relative">
                 <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500">YAGEO email</label>
-                <input type="email" value={mascotEmail} onChange={(event) => setMascotEmail(event.target.value)} placeholder="firstname.lastname@yageo.com" className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                <input
+                  type="text"
+                  inputMode="email"
+                  value={mascotEmail}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setSelectedMascotMailbox(null);
+                    setMascotEmail(value);
+                    setIsMascotEmailSuggestionsOpen(value.trim().length >= 2);
+                  }}
+                  onFocus={() => setIsMascotEmailSuggestionsOpen(!selectedMascotMailbox && mascotEmail.trim().length >= 2)}
+                  onBlur={() => window.setTimeout(() => setIsMascotEmailSuggestionsOpen(false), 150)}
+                  placeholder="Search name or email..."
+                  role="combobox"
+                  aria-expanded={isMascotEmailSuggestionsOpen}
+                  aria-controls="admin-mascot-email-suggestions"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+                {isMascotEmailSuggestionsOpen && (
+                  <div
+                    id="admin-mascot-email-suggestions"
+                    role="listbox"
+                    className="absolute left-0 right-0 top-full z-[80] mt-2 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2 shadow-2xl"
+                  >
+                    {isMascotEmailLookupLoading ? (
+                      <div className="px-3 py-3 text-xs font-semibold text-slate-500">Searching YAGEO mailboxes...</div>
+                    ) : mascotEmailSuggestions.length > 0 ? (
+                      mascotEmailSuggestions.map(user => {
+                        const mailboxEmail = getInternalTestMailboxEmail(user);
+                        if (!mailboxEmail) return null;
+
+                        return (
+                          <button
+                            key={mailboxEmail}
+                            type="button"
+                            role="option"
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              handleSelectMascotMailbox(user);
+                            }}
+                            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-amber-50 focus:bg-amber-50 focus:outline-none"
+                          >
+                            <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-amber-500 text-[11px] font-black text-white">
+                              {getInternalTestMailboxInitials(user)}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-black text-slate-950">
+                                {user.displayName || mailboxEmail}
+                              </span>
+                              <span className="block truncate text-xs font-semibold text-slate-600">
+                                {mailboxEmail}
+                              </span>
+                              {getInternalTestMailboxRoleLine(user) && (
+                                <span className="block truncate text-[11px] font-bold uppercase tracking-wide text-amber-800">
+                                  {getInternalTestMailboxRoleLine(user)}
+                                </span>
+                              )}
+                            </span>
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <div className="px-3 py-3 text-xs font-semibold text-slate-500">No matching YAGEO mailbox found.</div>
+                    )}
+                  </div>
+                )}
+                <p className="mt-1 text-[11px] font-medium text-slate-400">Search by name or email, then select a mailbox before assigning.</p>
               </div>
               <div>
                 <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500">Animated mascot</label>
