@@ -94,7 +94,7 @@ The first route reads the existing Firestore booking, checks ownership/status/ti
 
 Current supported `tool` values:
 
-- `send_test_email` — payload `{ email }`
+- `send_test_email` — payload `{ email }`; sends the booking-detail template with sample room/date/time data and no real name, email, or booking ID in the HTML body.
 - `force_send_booking_email` — payload `{ bookingId }`
 - `update_booking_verify_status` — payload `{ targetStatus, bookingIds?, allBookings? }`
 

@@ -299,15 +299,22 @@ async function getRoomName(roomId) {
   return roomId;
 }
 
-function buildVerificationEmailPayload(email, bookingId, verifyUrl, booking, roomName = "-") {
-  const title = booking.title || "TOKIN Smart Room booking";
+function buildVerificationEmailPayload(email, bookingId, verifyUrl, booking, roomName = "-", options = {}) {
+  const isTemplatePreview = options.templatePreview === true || booking.templatePreview === true;
+  const title = booking.title || (isTemplatePreview ? "Booking template preview" : "TOKIN Smart Room booking");
   const startTime = formatDateTimeForEmail(booking.startTime);
   const endTime = formatDateTimeForEmail(booking.endTime);
   const displayRoom = roomName && roomName !== "-" ? roomName : (booking.roomName || booking.roomId || "-");
+  const displayBookingId = bookingId ? `#${escapeHtml(bookingId)}` : "-";
+  const displayOrganizer = isTemplatePreview ? "-" : (booking.organizer || "-");
+  const displayDepartment = isTemplatePreview ? "-" : (booking.department || "-");
+  const displayDeskNumber = isTemplatePreview ? "-" : (booking.deskNumber || "-");
 
   return {
     to: email,
-    subject: `[TOKIN Smart Room] แจ้งเตือน: อีก 15 นาทีจะเริ่มการประชุม (${displayRoom})`,
+    subject: isTemplatePreview
+      ? "[TOKIN Smart Room] Booking template preview"
+      : `[TOKIN Smart Room] แจ้งเตือน: อีก 15 นาทีจะเริ่มการประชุม (${displayRoom})`,
     senderName: "TOKIN Smart Room",
     message: [
       '<div style="margin:0;padding:24px 12px;background:#f1f5f9;font-family:\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;">',
@@ -339,10 +346,10 @@ function buildVerificationEmailPayload(email, bookingId, verifyUrl, booking, roo
       '<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:13px;line-height:20px;">',
       `<tr><td style="width:110px;padding:6px 0;color:#64748b;font-weight:700;">🏢 ห้องประชุม</td><td style="padding:6px 0;color:#0f172a;font-weight:800;">${escapeHtml(displayRoom)}</td></tr>`,
       `<tr><td style="width:110px;padding:6px 0;color:#64748b;font-weight:700;">⏰ เวลาประชุม</td><td style="padding:6px 0;color:#0284c7;font-weight:800;">${escapeHtml(startTime)} - ${escapeHtml(endTime)}</td></tr>`,
-      `<tr><td style="width:110px;padding:6px 0;color:#64748b;font-weight:700;">👤 ผู้จอง</td><td style="padding:6px 0;color:#0f172a;font-weight:700;">${escapeHtml(booking.organizer || "-")}</td></tr>`,
-      `<tr><td style="width:110px;padding:6px 0;color:#64748b;font-weight:700;">🏢 แผนก</td><td style="padding:6px 0;color:#0f172a;">${escapeHtml(booking.department || "-")}</td></tr>`,
-      `<tr><td style="width:110px;padding:6px 0;color:#64748b;font-weight:700;">☎️ เบอร์โต๊ะ/ติดต่อ</td><td style="padding:6px 0;color:#0f172a;">${escapeHtml(booking.deskNumber || "-")}</td></tr>`,
-      `<tr><td style="width:110px;padding:6px 0;color:#64748b;font-weight:700;">🏷️ รหัสการจอง</td><td style="padding:6px 0;color:#64748b;">#${escapeHtml(bookingId)}</td></tr>`,
+      `<tr><td style="width:110px;padding:6px 0;color:#64748b;font-weight:700;">👤 ผู้จอง</td><td style="padding:6px 0;color:#0f172a;font-weight:700;">${escapeHtml(displayOrganizer)}</td></tr>`,
+      `<tr><td style="width:110px;padding:6px 0;color:#64748b;font-weight:700;">🏢 แผนก</td><td style="padding:6px 0;color:#0f172a;">${escapeHtml(displayDepartment)}</td></tr>`,
+      `<tr><td style="width:110px;padding:6px 0;color:#64748b;font-weight:700;">☎️ เบอร์โต๊ะ/ติดต่อ</td><td style="padding:6px 0;color:#0f172a;">${escapeHtml(displayDeskNumber)}</td></tr>`,
+      `<tr><td style="width:110px;padding:6px 0;color:#64748b;font-weight:700;">🏷️ รหัสการจอง</td><td style="padding:6px 0;color:#64748b;">${displayBookingId}</td></tr>`,
       '</table>',
       '</div>',
 
@@ -2453,41 +2460,43 @@ exports.getActiveAnnouncement = onCall(INTERNAL_TOOL_HTTPS_OPTIONS, async (reque
   }
 });
 
-async function runInternalSendTestEmailTool(payload, data) {
+function buildTemplateBookingPreview() {
+  const startTime = new Date(Date.now() + 15 * 60 * 1000);
+  return {
+    templatePreview: true,
+    title: "Sample booking template",
+    roomName: "Sample Meeting Room",
+    roomId: "",
+    organizer: "",
+    department: "",
+    deskNumber: "",
+    email: "",
+    startTime,
+    endTime: new Date(startTime.getTime() + 60 * 60 * 1000),
+  };
+}
+
+async function runInternalSendTestEmailTool(payload) {
   const email = assertYageoEmail(payload.email);
-  const adminUsername = data.admin && typeof data.admin.username === "string"
-    ? data.admin.username
-    : "admin";
-  const subject = "[TOKIN Smart Room] Internal email test";
-  const message = [
-    '<div style="margin:0;padding:24px;background:#f8fafc;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">',
-    '<div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">',
-    '<div style="background:#0f172a;color:#ffffff;padding:18px 22px;">',
-    '<div style="font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">TOKIN Smart Room</div>',
-    '<div style="font-size:22px;font-weight:800;margin-top:6px;">Internal Email Test</div>',
-    '</div>',
-    '<div style="padding:22px;font-size:14px;line-height:21px;">',
-    '<p style="margin:0 0 12px;">This message confirms that the internal email tool can reach the configured Power Automate flow.</p>',
-    `<p style="margin:0 0 12px;"><strong>Requested by:</strong> ${escapeHtml(adminUsername)}</p>`,
-    `<p style="margin:0;"><strong>Time:</strong> ${escapeHtml(formatDateTimeForEmail(new Date()))}</p>`,
-    '</div>',
-    '</div>',
-    '</div>',
-  ].join("");
+  const bookingPreview = buildTemplateBookingPreview();
+  const emailPayload = buildVerificationEmailPayload(
+    email,
+    "",
+    APP_BASE_URL,
+    bookingPreview,
+    bookingPreview.roomName,
+    { templatePreview: true },
+  );
+  const subject = emailPayload.subject;
   const historyBase = {
     recipientEmail: email,
-    recipientName: adminUsername,
+    recipientName: "",
     subject,
-    purpose: "Internal Email Test",
+    purpose: "Booking Template Preview",
   };
 
   try {
-    await sendPowerAutomateEmail({
-      to: email,
-      subject,
-      senderName: "TOKIN Smart Room",
-      message,
-    });
+    await sendPowerAutomateEmail(emailPayload);
 
     const historyId = await recordEmailSentHistory({
       ...historyBase,

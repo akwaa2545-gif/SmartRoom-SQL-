@@ -163,6 +163,14 @@ export interface PortableAdminSessionsResponse {
   summary: PortableAdminSessionSummary;
 }
 
+export interface PortableMailboxUser {
+  displayName?: string;
+  mail?: string;
+  userPrincipalName?: string;
+  department?: string;
+  jobTitle?: string;
+}
+
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const user = auth.currentUser || (await signInAnonymously(auth)).user;
   const token = await user.getIdToken();
@@ -276,7 +284,7 @@ export const getPortableAdminEmailHistory = async () => {
 };
 export const createPortableBooking = (booking: Record<string, unknown>) => request<{ booking: Record<string, unknown>; status: 'sent' | 'failed'; emailError?: string }>('/api/bookings', { method: 'POST', body: JSON.stringify(booking) });
 export const getPortableVerificationContext = (bookingId: string, token: string) => request<PortableVerificationContext>(`/api/bookings/${encodeURIComponent(bookingId)}/verification-context?token=${encodeURIComponent(token)}`);
-export const searchPortableMailboxes = (query: string) => request<{ users?: unknown[] }>(`/api/mailboxes?query=${encodeURIComponent(query)}`);
+export const searchPortableMailboxes = (query: string) => request<{ users?: PortableMailboxUser[] }>(`/api/mailboxes?query=${encodeURIComponent(query)}`);
 export const lookupPortableMailbox = (email: string) => request<{ exists?: boolean; email?: string; user?: unknown }>('/api/mailboxes/lookup', { method: 'POST', body: JSON.stringify({ email }) });
 export const sendPortableBookingVerificationEmail = (bookingId: string, email: string) => request<{ bookingId?: string; scheduledAt?: string; windowStart?: string; windowEnd?: string; sentAt?: string; verifyUrl?: string; status?: 'queued' | 'sent' }>('/api/booking-verification-emails', { method: 'POST', body: JSON.stringify({ bookingId, email }) });
 export const verifyPortableBookingToken = (bookingId: string, token: string) => request<{ title?: string; alreadyVerified?: boolean }>('/api/bookings/verify-token', { method: 'POST', body: JSON.stringify({ bookingId, token }) });

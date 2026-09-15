@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Announcement, AnnouncementAudience, AnnouncementCategory, Booking, Room, RoomType, BookingStatus, AdminUser, AdminRole, EmailSentHistoryRecord, EmailSentStatus } from '../types';
 import { INITIAL_ADMIN_USERS, DEPARTMENTS, BOOKING_START_HOUR, BOOKING_END_HOUR } from '../constants';
 import { Lock, Trash2, Search, Calendar, User, Clock, LayoutGrid, Edit, Plus, X, Save, Building2, IdCard, Check, XCircle, Shield, ShieldCheck, UserCog, LogIn, Upload, FileText, Flame, Sparkles, TrendingUp, Users, AlertCircle, BarChart2, Mail, RefreshCw, Download, BookOpen, Wrench, Send, Megaphone, Eye, Info, AlertTriangle, CheckCircle2, Bell, Activity, Monitor, Wifi } from 'lucide-react';
@@ -7,7 +7,7 @@ import ConfirmationModal from './ConfirmationModal';
 import { collection, onSnapshot, setDoc, doc } from 'firebase/firestore';
 import { signInAnonymously } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
-import { getPortableAdminEmailHistory, getPortableAdminPassword, getPortableAdminSessions, heartbeatPortableAdminSession, isPortableMailApiEnabled, loginPortableAdmin, logoutPortableAdmin, PortableAdminSessionsResponse, runPortableAdminTool } from '../utils/portableMailApi';
+import { getPortableAdminEmailHistory, getPortableAdminPassword, getPortableAdminSessions, heartbeatPortableAdminSession, isPortableMailApiEnabled, loginPortableAdmin, logoutPortableAdmin, PortableAdminSessionsResponse, PortableMailboxUser, runPortableAdminTool, searchPortableMailboxes } from '../utils/portableMailApi';
 import { db, auth, functions, handleFirestoreError, OperationType } from '../firebase';
 import { AdminGuideModal } from './admin/AdminGuideModal';
 import { EditBookingModal } from './admin/EditBookingModal';
@@ -495,6 +495,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   }, [activeTab, currentUser?.id, currentUser?.role]);
 
   const [internalTestEmail, setInternalTestEmail] = useState('');
+  const [internalTestEmailSuggestions, setInternalTestEmailSuggestions] = useState<PortableMailboxUser[]>([]);
+  const [selectedInternalTestMailbox, setSelectedInternalTestMailbox] = useState<PortableMailboxUser | null>(null);
+  const [isInternalTestEmailLookupLoading, setIsInternalTestEmailLookupLoading] = useState(false);
+  const [isInternalTestEmailSuggestionsOpen, setIsInternalTestEmailSuggestionsOpen] = useState(false);
+  const internalTestEmailLookupRequestIdRef = useRef(0);
   const [isSendingInternalTestEmail, setIsSendingInternalTestEmail] = useState(false);
   const [internalBookingTarget, setInternalBookingTarget] = useState<InternalBookingTarget>('single');
   const [internalBookingId, setInternalBookingId] = useState('');
@@ -505,6 +510,52 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const [bookingRepairResult, setBookingRepairResult] = useState<BookingRepairResult | null>(null);
   const [isScanningBookingRepair, setIsScanningBookingRepair] = useState(false);
   const [isRepairingBookingData, setIsRepairingBookingData] = useState(false);
+
+  useEffect(() => {
+    const query = internalTestEmail.trim();
+    const requestId = internalTestEmailLookupRequestIdRef.current + 1;
+    internalTestEmailLookupRequestIdRef.current = requestId;
+    const selectedMailbox = (selectedInternalTestMailbox?.mail || selectedInternalTestMailbox?.userPrincipalName || '').trim().toLowerCase();
+
+    if (selectedMailbox && selectedMailbox === query.toLowerCase()) {
+      setInternalTestEmailSuggestions([]);
+      setIsInternalTestEmailLookupLoading(false);
+      setIsInternalTestEmailSuggestionsOpen(false);
+      return;
+    }
+
+    if (query.length < 2) {
+      setInternalTestEmailSuggestions([]);
+      setIsInternalTestEmailLookupLoading(false);
+      setIsInternalTestEmailSuggestionsOpen(false);
+      return;
+    }
+
+    const timeout = window.setTimeout(async () => {
+      setIsInternalTestEmailLookupLoading(true);
+      try {
+        const response = isPortableMailApiEnabled()
+          ? { data: await searchPortableMailboxes(query) }
+          : await httpsCallable(functions, 'searchYageoMailboxes')({ query });
+        if (internalTestEmailLookupRequestIdRef.current !== requestId) return;
+
+        const data = response.data as { users?: PortableMailboxUser[] };
+        setInternalTestEmailSuggestions(Array.isArray(data.users) ? data.users : []);
+        setIsInternalTestEmailSuggestionsOpen(true);
+      } catch (error) {
+        if (internalTestEmailLookupRequestIdRef.current !== requestId) return;
+        console.error('Admin test-email mailbox search failed:', error);
+        setInternalTestEmailSuggestions([]);
+        setIsInternalTestEmailSuggestionsOpen(true);
+      } finally {
+        if (internalTestEmailLookupRequestIdRef.current === requestId) {
+          setIsInternalTestEmailLookupLoading(false);
+        }
+      }
+    }, 350);
+
+    return () => window.clearTimeout(timeout);
+  }, [internalTestEmail, selectedInternalTestMailbox]);
 
   const sortedRooms = useMemo(() => {
     const order: Record<string, number> = {
@@ -1923,6 +1974,31 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     return language === 'th' ? 'Confirmed / wait for verify' : 'Confirmed / wait for verify';
   };
 
+  const getInternalTestMailboxEmail = (user: PortableMailboxUser) => (
+    user.mail || user.userPrincipalName || ''
+  ).trim().toLowerCase();
+
+  const getInternalTestMailboxRoleLine = (user: PortableMailboxUser) => (
+    [user.jobTitle, user.department].map(value => value?.trim()).filter(Boolean).join(' - ')
+  );
+
+  const getInternalTestMailboxInitials = (user: PortableMailboxUser) => {
+    const label = user.displayName || getInternalTestMailboxEmail(user);
+    const words = label.split(/[\s.]+/).filter(Boolean);
+    if (words.length === 0) return 'YG';
+    if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+    return `${words[0][0]}${words[1][0]}`.toUpperCase();
+  };
+
+  const handleSelectInternalTestMailbox = (user: PortableMailboxUser) => {
+    const selectedEmail = getInternalTestMailboxEmail(user);
+    if (!selectedEmail) return;
+    setSelectedInternalTestMailbox(user);
+    setInternalTestEmail(selectedEmail);
+    setInternalTestEmailSuggestions([]);
+    setIsInternalTestEmailSuggestionsOpen(false);
+  };
+
   const handleSendInternalTestEmail = async (event: React.FormEvent) => {
     event.preventDefault();
 
@@ -1935,8 +2011,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     setIsSendingInternalTestEmail(true);
     try {
       await runInternalAdminTool('send_test_email', { email });
-      showNotification('Internal test email sent successfully.', 'success');
+      showNotification('Booking template email sent successfully.', 'success');
+      setSelectedInternalTestMailbox(null);
       setInternalTestEmail('');
+      setInternalTestEmailSuggestions([]);
+      setIsInternalTestEmailSuggestionsOpen(false);
       if (activeTab === 'emails') {
         void loadEmailHistory();
       }
@@ -3633,18 +3712,78 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                   <Mail className="w-4 h-4 mr-2 text-brand-500" />
                   Mail Send Test
                 </h3>
-                <p className="text-xs text-slate-500 font-medium mt-1">Send a test email through the configured Power Automate mail flow.</p>
+                <p className="text-xs text-slate-500 font-medium mt-1">Send the booking detail template to a test recipient using sample room and time data. No real name, email, or booking ID is included in the template.</p>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Recipient email</label>
+              <div className="relative">
+                <label className="block text-xs font-bold text-slate-600 mb-1">Test recipient email</label>
                 <input
-                  type="email"
+                  type="text"
+                  inputMode="email"
                   value={internalTestEmail}
-                  onChange={(event) => setInternalTestEmail(event.target.value)}
-                  placeholder="name@yageo.com"
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setSelectedInternalTestMailbox(null);
+                    setInternalTestEmail(value);
+                    setIsInternalTestEmailSuggestionsOpen(value.trim().length >= 2);
+                  }}
+                  onFocus={() => setIsInternalTestEmailSuggestionsOpen(!selectedInternalTestMailbox && internalTestEmail.trim().length >= 2)}
+                  onBlur={() => window.setTimeout(() => setIsInternalTestEmailSuggestionsOpen(false), 150)}
+                  placeholder="your-test-address@yageo.com"
+                  role="combobox"
+                  aria-expanded={isInternalTestEmailSuggestionsOpen}
+                  aria-controls="admin-test-email-suggestions"
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium"
                 />
+                {isInternalTestEmailSuggestionsOpen && (
+                  <div
+                    id="admin-test-email-suggestions"
+                    role="listbox"
+                    className="absolute left-0 right-0 top-full z-[80] mt-2 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2 shadow-2xl"
+                  >
+                    {isInternalTestEmailLookupLoading ? (
+                      <div className="px-3 py-3 text-xs font-semibold text-slate-500">Searching YAGEO mailboxes...</div>
+                    ) : internalTestEmailSuggestions.length > 0 ? (
+                      internalTestEmailSuggestions.map(user => {
+                        const mailboxEmail = getInternalTestMailboxEmail(user);
+                        if (!mailboxEmail) return null;
+
+                        return (
+                          <button
+                            key={mailboxEmail}
+                            type="button"
+                            role="option"
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              handleSelectInternalTestMailbox(user);
+                            }}
+                            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-indigo-50 focus:bg-indigo-50 focus:outline-none"
+                          >
+                            <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-slate-900 text-[11px] font-black text-white">
+                              {getInternalTestMailboxInitials(user)}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-black text-slate-950">
+                                {user.displayName || mailboxEmail}
+                              </span>
+                              <span className="block truncate text-xs font-semibold text-slate-600">
+                                {mailboxEmail}
+                              </span>
+                              {getInternalTestMailboxRoleLine(user) && (
+                                <span className="block truncate text-[11px] font-bold uppercase tracking-wide text-indigo-800">
+                                  {getInternalTestMailboxRoleLine(user)}
+                                </span>
+                              )}
+                            </span>
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <div className="px-3 py-3 text-xs font-semibold text-slate-500">No matching YAGEO mailbox found.</div>
+                    )}
+                  </div>
+                )}
+                <p className="text-[11px] text-slate-400 font-medium mt-1">The address is used only as the recipient and is not inserted into the booking details.</p>
               </div>
 
               <button
@@ -3657,7 +3796,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                 ) : (
                   <Send className="w-4 h-4 mr-2" />
                 )}
-                Send Test Mail
+                Send Template Preview
               </button>
             </form>
 

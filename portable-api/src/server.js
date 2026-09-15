@@ -993,14 +993,19 @@ function buildLegacyReminderMessage(bookingId, booking, appUrl) {
 }
 
 function buildReminderMessage(bookingId, booking, appUrl) {
-  const title = escapeHtml(booking.title || "TOKIN Smart Room booking");
+  const isTemplatePreview = booking.templatePreview === true;
+  const title = escapeHtml(
+    booking.title || (isTemplatePreview ? "Sample booking template" : "TOKIN Smart Room booking"),
+  );
   const roomName = escapeHtml(
-    booking.roomName || booking.roomId || "Smart Room",
+    booking.roomName || booking.roomId || (isTemplatePreview ? "Sample Meeting Room" : "Smart Room"),
   );
   const organizer = escapeHtml(
-    booking.organizer || booking.email || "Room organizer",
+    isTemplatePreview ? "-" : (booking.organizer || booking.email || "Room organizer"),
   );
-  const department = escapeHtml(booking.department || "-");
+  const department = escapeHtml(isTemplatePreview ? "-" : (booking.department || "-"));
+  const displayBookingId = bookingId ? escapeHtml(bookingId) : "-";
+  const ticketLabel = isTemplatePreview ? "TEMPLATE PREVIEW" : "BOOKING TICKET";
   const start = toDate(booking.startTime);
   const end = toDate(booking.endTime);
   const bookingDate = start
@@ -1041,7 +1046,7 @@ function buildReminderMessage(bookingId, booking, appUrl) {
                 <td style="vertical-align:middle;"><div style="font-size:18px;line-height:20px;font-weight:800;color:#e5673e;letter-spacing:-0.2px;">TOKIN</div><div style="margin-top:2px;font-size:11px;color:#64748b;">Smart Room</div></td>
               </tr></table>
             </td>
-            <td align="right" style="font-size:10px;font-weight:700;letter-spacing:1px;color:#c2410c;text-transform:uppercase;">Booking reminder</td>
+            <td align="right" style="font-size:10px;font-weight:700;letter-spacing:1px;color:#c2410c;text-transform:uppercase;">${ticketLabel}</td>
           </tr></table>
         </td></tr>
         <tr><td style="padding:30px 28px 12px;">
@@ -1066,7 +1071,7 @@ function buildReminderMessage(bookingId, booking, appUrl) {
         </td></tr>
         <tr><td style="padding:14px 28px 8px;">
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;">
-            <tr><td style="padding:13px 16px;font-size:13px;line-height:21px;"><span style="display:inline-block;width:92px;color:#64748b;">Booked by</span><strong style="color:#0f172a;">${organizer}</strong><br><span style="display:inline-block;width:92px;color:#64748b;">Department</span><strong style="color:#0f172a;">${department}</strong><br><span style="display:inline-block;width:92px;color:#64748b;">Booking ID</span><span style="font-family:monospace;font-size:12px;color:#475569;">${escapeHtml(bookingId)}</span></td></tr>
+            <tr><td style="padding:13px 16px;font-size:13px;line-height:21px;"><span style="display:inline-block;width:92px;color:#64748b;">Booked by</span><strong style="color:#0f172a;">${organizer}</strong><br><span style="display:inline-block;width:92px;color:#64748b;">Department</span><strong style="color:#0f172a;">${department}</strong><br><span style="display:inline-block;width:92px;color:#64748b;">Booking ID</span><span style="font-family:monospace;font-size:12px;color:#475569;">${displayBookingId}</span></td></tr>
           </table>
         </td></tr>
         <tr><td align="center" style="padding:24px 28px 28px;"><table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr><td style="background:#e5673e;border-radius:10px;"><a href="${safeAppUrl}" target="_blank" style="display:inline-block;padding:13px 24px;border-radius:10px;font-size:14px;font-weight:800;color:#ffffff;text-decoration:none;">Open TOKIN Smart Room</a></td></tr></table><p style="margin:14px 0 0;font-size:12px;line-height:18px;color:#64748b;">No action is required. Please arrive at the room on time.</p></td></tr>
@@ -1608,10 +1613,26 @@ async function queueOrSendBookingEmail(input, requesterUid) {
   };
 }
 
-async function sendAdminTestEmail(email, username) {
+function buildTemplateBookingPreview() {
+  const startTime = new Date(Date.now() + 15 * 60 * 1000);
+  return {
+    templatePreview: true,
+    title: "Sample booking template",
+    roomName: "Sample Meeting Room",
+    roomId: "",
+    organizer: "",
+    department: "",
+    email: "",
+    startTime,
+    endTime: new Date(startTime.getTime() + 60 * 60 * 1000),
+  };
+}
+
+async function sendAdminTestEmail(email) {
   const recipient = assertYageoEmail(email, config.yageoDomain);
-  const subject = "[TOKIN Smart Room] Internal email test";
-  const message = `<div style="font-family:Arial,sans-serif"><h2>TOKIN Smart Room</h2><p>This message confirms that the internal email tool can reach Power Automate.</p><p><strong>Requested by:</strong> ${escapeHtml(username)}</p></div>`;
+  const bookingPreview = buildTemplateBookingPreview();
+  const subject = "[TOKIN Smart Room] Booking template preview";
+  const message = buildReminderMessage("", bookingPreview, config.appBaseUrl);
   try {
     await callFlow(
       config.emailFlowUrl,
@@ -1633,7 +1654,7 @@ async function sendAdminTestEmail(email, username) {
       email: recipient,
       subject,
       status: "failed",
-      purpose: "Internal Email Test",
+      purpose: "Booking Template Preview",
       errorCode: cause.code || "internal",
       errorMessage: cause.message,
     });
@@ -1643,7 +1664,7 @@ async function sendAdminTestEmail(email, username) {
     email: recipient,
     subject,
     status: "successful",
-    purpose: "Internal Email Test",
+    purpose: "Booking Template Preview",
   });
   return { email: recipient, status: "sent" };
 }
@@ -2129,7 +2150,7 @@ async function runAdminTool(session, input) {
   };
   if (tool === "send_test_email") {
     requireSuperAdmin();
-    return sendAdminTestEmail(payload.email, session.username);
+    return sendAdminTestEmail(payload.email);
   }
   if (tool === "force_send_booking_email") {
     requireSuperAdmin();
