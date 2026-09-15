@@ -263,7 +263,7 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
           <div className="space-y-2 min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <span className="text-xs font-black text-amber-950 uppercase tracking-wider">
-                {language === 'th' ? 'เกร็ดความรู้รางวัลเกียรติยศประจำเดือน' : 'Monthly Honor & Mascot Rewards'}
+                {language === 'th' ? 'เกร็ดความรู้รางวัลเกียรติยศประจำเดือน' : 'Monthly Honor Rewards'}
               </span>
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500"></span>
             </div>
@@ -279,12 +279,12 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
                 </div>
               </div>
               <div className="flex items-start gap-2.5 bg-white/90 border border-amber-100/80 rounded-xl p-2.5 shadow-2xs">
-                <span className="text-lg shrink-0 select-none">🐾</span>
+                <span className="text-lg shrink-0 select-none">🎯</span>
                 <div className="text-[11.5px] font-semibold text-slate-700 leading-snug">
                   {language === 'th' ? (
-                    <>แผนกที่ใช้งานห้องสูงสุด 3 อันดับแรกประจำเดือน จะได้รับ<strong className="text-amber-800 font-black">มาสคอตดุ๊กดิ๊ก</strong>ไปวิ่งบนรายการจอง (อันดับ 1: 🐱 น้องแมว 👑 / อันดับ 2: 🐧 น้องเพนกวิน 🥈 / อันดับ 3: 🐰 น้องกระต่าย 🥉)</>
+                    <>มาสคอตจะแสดงเฉพาะรายการจองของผู้ใช้ที่ผู้ดูแลระบบกำหนดเท่านั้น และไม่มีการแจกมาสคอตอัตโนมัติตามแผนก</>
                   ) : (
-                    <>The Top 3 departments unlock exclusive <strong className="text-amber-800 font-black">living mascots</strong> on their bookings (1st: 🐱 King Cat 👑, 2nd: 🐧 Waddling Penguin 🥈, 3rd: 🐰 Bunny 🥉).</>
+                    <>Mascots appear only on bookings for users assigned by an administrator; departments receive no automatic mascot.</>
                   )}
                 </div>
               </div>

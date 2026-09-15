@@ -368,12 +368,12 @@ const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({
                         </p>
                       </div>
                       <div className="flex items-start gap-2 bg-white/90 border border-amber-100/90 rounded-xl p-2 shadow-2xs">
-                        <span className="text-base shrink-0 select-none">🐾</span>
+                        <span className="text-base shrink-0 select-none">🎯</span>
                         <p className="text-[10.5px] font-semibold text-slate-700 leading-snug">
                           {language === 'th' ? (
-                            <>แผนกที่ใช้ห้องสูงสุด 3 อันดับแรกประจำเดือน จะได้รับ<strong className="text-amber-800 font-extrabold">มาสคอตดุ๊กดิ๊ก</strong>ไปวิ่งบนรายการจอง (🥇: 🐱 แมว / 🥈: 🐧 เพนกวิน / 🥉: 🐰 กระต่าย)</>
+                            <>มาสคอตจะแสดงเฉพาะรายการจองของผู้ใช้ที่ผู้ดูแลระบบกำหนดเท่านั้น และไม่มีการแจกมาสคอตอัตโนมัติตามแผนก</>
                           ) : (
-                            <>The Top 3 departments unlock living <strong className="text-amber-800 font-extrabold">mascots</strong> (🥇: 🐱 Cat, 🥈: 🐧 Penguin, 🥉: 🐰 Bunny) on bookings.</>
+                            <>Mascots appear only on bookings for users assigned by an administrator; departments receive no automatic mascot.</>
                           )}
                         </p>
                       </div>
@@ -1355,8 +1355,6 @@ export const InteractiveDancingCat: React.FC<{
     </div>
   );
 };
-
-export const TopRankHonorMascot = InteractiveDancingCat;
 
 export const AssignedMascot: React.FC<{
   mascotId: MascotId;

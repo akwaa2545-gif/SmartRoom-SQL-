@@ -34,7 +34,7 @@ import { BookingDisplayState, getBookingDisplayState as getSharedBookingDisplayS
 import { getPortableLeaderboard, isPortableMailApiEnabled, lookupPortableMailbox, PortableLeaderboard, searchPortableMailboxes } from '../utils/portableMailApi';
 import { calculateLeaderboardStats, getLeaderboardHonorInfo } from '../utils/leaderboardStats';
 import { MascotAssignments, normalizeMascotEmail } from '../utils/mascots';
-import LeaderboardPanel, { AssignedMascot, LeaderboardBookingBadge, TopRankHonorMascot } from './LeaderboardPanel';
+import LeaderboardPanel, { AssignedMascot, LeaderboardBookingBadge } from './LeaderboardPanel';
 
 export type DashboardMainView = 'status' | 'timeline';
 
@@ -233,25 +233,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     });
     return map;
   }, [currentMonthLeaderboardStats]);
-
-  const departmentLeaderboardRankMap = useMemo(() => {
-    const map = new Map<string, number>();
-    currentMonthLeaderboardStats.departments.forEach((d) => {
-      if (d.department) {
-        map.set(d.department.trim().toLowerCase(), d.rank);
-      }
-    });
-    return map;
-  }, [currentMonthLeaderboardStats]);
-
-  const getBookingDepartmentRank = (booking?: Booking | null): number | undefined => {
-    if (!booking) return undefined;
-    const dept = (booking.department || booking.emailDepartment || '').trim().toLowerCase();
-    if (dept && dept !== '-' && dept !== 'other' && departmentLeaderboardRankMap.has(dept)) {
-      return departmentLeaderboardRankMap.get(dept);
-    }
-    return undefined;
-  };
 
   const getBookingLeaderboardRank = (booking?: Booking | null): number | undefined => {
     if (!booking) return undefined;
@@ -1354,7 +1335,6 @@ const Dashboard: React.FC<DashboardProps> = ({
                                   const displayState = getBookingDisplayState(b);
                                   const leaderboardRank = getBookingLeaderboardRank(b);
                                   const honor = getLeaderboardHonorInfo(leaderboardRank, language);
-                                  const departmentRank = getBookingDepartmentRank(b);
 
                                   return (
                                     <div key={b.id} className={`p-2 rounded-lg border text-[11px] transition-all relative ${
@@ -1382,9 +1362,6 @@ const Dashboard: React.FC<DashboardProps> = ({
                                         <div className="flex items-center gap-1 shrink-0">
                                           {getAssignedMascot(b) && (
                                             <AssignedMascot mascotId={getAssignedMascot(b)!} isUsed={displayState === 'used'} />
-                                          )}
-                                          {!getAssignedMascot(b) && departmentRank && departmentRank <= 3 && (
-                                            <TopRankHonorMascot rank={departmentRank} departmentKey={b.department} isUsed={displayState === 'used'} colSpan={1} />
                                           )}
                                           <span
                                             title={displayState === 'waitForVerify' || displayState === 'roomInUse' || displayState === 'noCheckIn' ? checkInWindowTooltip : undefined}
@@ -1514,7 +1491,6 @@ const Dashboard: React.FC<DashboardProps> = ({
 
                                   const leaderboardRank = getBookingLeaderboardRank(booking);
                                   const honor = getLeaderboardHonorInfo(leaderboardRank, language);
-                                  const departmentRank = getBookingDepartmentRank(booking);
                                   const displayState = getBookingDisplayState(booking);
 
                                   renderedCells.push(
@@ -1538,9 +1514,6 @@ const Dashboard: React.FC<DashboardProps> = ({
                                           </span>
                                           {getAssignedMascot(booking) && (
                                             <AssignedMascot mascotId={getAssignedMascot(booking)!} isUsed={displayState === 'used'} />
-                                          )}
-                                          {!getAssignedMascot(booking) && departmentRank && departmentRank <= 3 && (
-                                            <TopRankHonorMascot rank={departmentRank} departmentKey={booking.department} isUsed={displayState === 'used'} colSpan={colSpan} />
                                           )}
                                         </div>
                                         <div className="truncate text-[9.5px] text-slate-800 font-bold w-full bg-white/70 px-1.5 py-0.5 rounded border border-white/80 flex items-center">
@@ -1893,7 +1866,6 @@ const Dashboard: React.FC<DashboardProps> = ({
                     const displayState = getBookingDisplayState(b);
                     const leaderboardRank = getBookingLeaderboardRank(b);
                     const honor = getLeaderboardHonorInfo(leaderboardRank, language);
-                    const departmentRank = getBookingDepartmentRank(b);
                     return (
                       <div key={b.id} className={`rounded-lg border p-3.5 shadow-sm transition-all relative ${
                         getBookingDepartmentClassForState(getBookingDisplayState(b), b.department)
@@ -1906,9 +1878,6 @@ const Dashboard: React.FC<DashboardProps> = ({
                             <div className="flex shrink-0 items-center gap-1.5">
                               {getAssignedMascot(b) && (
                                 <AssignedMascot mascotId={getAssignedMascot(b)!} isUsed={displayState === 'used'} />
-                              )}
-                              {!getAssignedMascot(b) && departmentRank && departmentRank <= 3 && (
-                                <TopRankHonorMascot rank={departmentRank} departmentKey={b.department} isUsed={displayState === 'used'} colSpan={2} />
                               )}
                               <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold border shadow-xs ${getBookingStatusBadgeClass(displayState, b.department)}`}>
                                 {getBookingDisplayLabel(b)}

@@ -2342,13 +2342,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
           Announcements
         </button>
 
-        <button
-          onClick={() => setActiveTab('mascots')}
-          className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center whitespace-nowrap ${activeTab === 'mascots' ? 'bg-brand-50 text-brand-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}
-        >
-          <Sparkles className="w-4 h-4 mr-2" />
-          Mascot Rewards
-        </button>
+        {currentUser.role === 'SUPER_ADMIN' && (
+          <button
+            onClick={() => setActiveTab('mascots')}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center whitespace-nowrap ${activeTab === 'mascots' ? 'bg-brand-50 text-brand-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}
+          >
+            <Sparkles className="w-4 h-4 mr-2" />
+            Mascot Assignments
+          </button>
+        )}
 
         <button
           onClick={() => setActiveTab('tools')}
@@ -3446,11 +3448,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       )}
 
-      {activeTab === 'mascots' && (
+      {activeTab === 'mascots' && currentUser.role === 'SUPER_ADMIN' && (
         <div className="space-y-6 animate-in fade-in zoom-in-95 duration-200">
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="flex items-center text-lg font-black text-slate-900"><Sparkles className="mr-2 h-5 w-5 text-amber-500" />Mascot Rewards</h2>
-            <p className="mt-1 text-sm font-medium text-slate-500">Assign one of 10 animated mascots to an individual YAGEO email address. The mascot appears on that user&apos;s bookings.</p>
+            <h2 className="flex items-center text-lg font-black text-slate-900"><Sparkles className="mr-2 h-5 w-5 text-amber-500" />Mascot Assignments</h2>
+            <p className="mt-1 text-sm font-medium text-slate-500">Only an administrator can assign one of 10 animated mascots to an individual YAGEO email address. Mascots are not assigned automatically by user ranking or department.</p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
