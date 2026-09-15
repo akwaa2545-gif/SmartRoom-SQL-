@@ -17,6 +17,10 @@ This contains everything you need to run your app locally.
 
 For LAN access, open the app from the host PC IP and port, for example `http://192.168.x.x:3000`. Booking verification emails still use `https://tokinsmartroom-495306.web.app`, not the LAN origin.
 
+## Release version
+
+The web footer reads the nearest `portable-api-v*` Git tag during the Vite build, so a portable API release and the web version stay aligned automatically. `VITE_APP_VERSION` can override the tag for a controlled build.
+
 ## Verification Email Configuration
 
 The Cloud Functions backend sends booking verification emails through Power Automate. Production must store the flow URL as a Firebase Functions secret:

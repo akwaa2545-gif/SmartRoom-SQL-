@@ -94,7 +94,7 @@ type RouteMode = "app" | "verify";
 const USER_DEFAULT_VIEW: AppView = "dashboard";
 const VERIFICATION_WINDOW_BEFORE_MS = 15 * 60 * 1000;
 const VERIFICATION_WINDOW_AFTER_MS = 15 * 60 * 1000;
-const APP_VERSION = "v1.0.21";
+const APP_VERSION = __SMARTROOM_VERSION__;
 
 const toBookingDate = (value: unknown): Date | null => {
   if (value instanceof Date)
