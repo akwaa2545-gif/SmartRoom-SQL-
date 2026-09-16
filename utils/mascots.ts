@@ -8,7 +8,7 @@ export const MASCOT_OPTIONS = [
   { id: 'hamster', label: 'Hamster Dash', emoji: '🐹', animation: 'mascot-dash' },
   { id: 'otter', label: 'Otter Wave', emoji: '🦦', animation: 'mascot-wave' },
   { id: 'unicorn', label: 'Unicorn Sparkle', emoji: '🦄', animation: 'mascot-sparkle' },
-  { id: 'minion', label: 'Minion', emoji: '🟡', animation: 'mascot-minion' },
+  { id: 'minion', label: 'Minion', emoji: '👓', animation: 'mascot-minion' },
 ] as const;
 
 export type MascotId = typeof MASCOT_OPTIONS[number]['id'];

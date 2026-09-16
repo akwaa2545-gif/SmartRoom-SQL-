@@ -6,6 +6,7 @@ import { calculateLeaderboardStats, formatDurationHours, LeaderboardPeriod, User
 import { formatDepartment } from '../translations';
 import { getBookingDepartmentBadgeClass } from '../bookingVisualStyles';
 import { MascotId, getMascotOption } from '../utils/mascots';
+import MascotIcon from './MascotIcon';
 
 interface LeaderboardPanelProps {
   leaderboard: PortableLeaderboard | null;
@@ -1370,8 +1371,7 @@ export const AssignedMascot: React.FC<{
       className={`relative inline-flex h-7 w-7 shrink-0 cursor-default items-center justify-center rounded-full border border-white/80 bg-white/90 text-base shadow-sm ${isUsed ? 'mascot-resting' : mascot.animation} ${className}`}
       aria-label={mascot.label}
     >
-      {mascot.emoji}
-      {mascotId === 'minion' && <span className="pointer-events-none absolute top-1 text-[8px]">👓</span>}
+      <MascotIcon mascotId={mascotId} size={22} />
     </span>
   );
 };

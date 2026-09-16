@@ -13,6 +13,7 @@ import { AdminGuideModal } from './admin/AdminGuideModal';
 import { EditBookingModal } from './admin/EditBookingModal';
 import { getBookingDepartmentBadgeClass, getBookingDepartmentClassForState, getBookingDepartmentDotClass } from '../bookingVisualStyles';
 import { MASCOT_OPTIONS, MascotAssignments, MascotId, getMascotOption, normalizeMascotEmail } from '../utils/mascots';
+import MascotIcon from './MascotIcon';
 
 export const CLOSURE_REASONS = [
   { key: 'Renovation', labelEn: 'Renovation', labelTh: 'ปิดปรับปรุงชั่วคราว' },
@@ -3673,7 +3674,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
             </div>
             <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
-              {MASCOT_OPTIONS.map((mascot) => <div key={mascot.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-center"><div className={`${mascot.animation} text-3xl`}>{mascot.emoji}</div><div className="mt-1 text-xs font-bold text-slate-700">{mascot.label}</div></div>)}
+              {MASCOT_OPTIONS.map((mascot) => <div key={mascot.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-center"><div className={`${mascot.animation} flex h-11 items-center justify-center text-3xl`}><MascotIcon mascotId={mascot.id} size={42} /></div><div className="mt-1 text-xs font-bold text-slate-700">{mascot.label}</div></div>)}
             </div>
           </div>
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -3706,7 +3707,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                     return (
                       <tr key={assignment.email}>
                         <td className="px-5 py-4 font-semibold text-slate-700">{assignment.email}</td>
-                        <td className="px-5 py-4 font-bold text-slate-800">{mascot?.emoji} {mascot?.label || assignment.mascotId}</td>
+                        <td className="px-5 py-4 font-bold text-slate-800"><MascotIcon mascotId={assignment.mascotId} size={24} className="mr-1" />{mascot?.label || assignment.mascotId}</td>
                         <td className="px-5 py-4 text-xs font-semibold text-slate-500">
                           <div>{assignment.updatedBy || '-'}</div>
                           {assignment.updatedAt && <div className="mt-0.5 text-[11px] text-slate-400">{new Date(assignment.updatedAt).toLocaleString()}</div>}
