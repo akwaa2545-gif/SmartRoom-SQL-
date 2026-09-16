@@ -171,6 +171,14 @@ export interface PortableMailboxUser {
   jobTitle?: string;
 }
 
+export interface PortableUserProfile {
+  email: string;
+  organizer: string;
+  department: string;
+  employeeId: string;
+  deskNumber: string;
+}
+
 export interface PortableAdminMascotAssignment {
   email: string;
   mascotId: string;
@@ -294,5 +302,6 @@ export const createPortableBooking = (booking: Record<string, unknown>) => reque
 export const getPortableVerificationContext = (bookingId: string, token: string) => request<PortableVerificationContext>(`/api/bookings/${encodeURIComponent(bookingId)}/verification-context?token=${encodeURIComponent(token)}`);
 export const searchPortableMailboxes = (query: string) => request<{ users?: PortableMailboxUser[] }>(`/api/mailboxes?query=${encodeURIComponent(query)}`);
 export const lookupPortableMailbox = (email: string) => request<{ exists?: boolean; email?: string; user?: unknown }>('/api/mailboxes/lookup', { method: 'POST', body: JSON.stringify({ email }) });
+export const getPortableUserProfile = (email: string) => request<{ profile?: PortableUserProfile | null }>(`/api/user-profiles/lookup?email=${encodeURIComponent(email)}`);
 export const sendPortableBookingVerificationEmail = (bookingId: string, email: string) => request<{ bookingId?: string; scheduledAt?: string; windowStart?: string; windowEnd?: string; sentAt?: string; verifyUrl?: string; status?: 'queued' | 'sent' }>('/api/booking-verification-emails', { method: 'POST', body: JSON.stringify({ bookingId, email }) });
 export const verifyPortableBookingToken = (bookingId: string, token: string) => request<{ title?: string; alreadyVerified?: boolean }>('/api/bookings/verify-token', { method: 'POST', body: JSON.stringify({ bookingId, token }) });

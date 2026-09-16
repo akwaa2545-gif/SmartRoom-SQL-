@@ -194,13 +194,13 @@ async function callFlow(flowUrl, payload, label) {
 async function searchMailboxes(query) {
   if (
     typeof query !== "string" ||
-    query.trim().length < 2 ||
+    query.trim().length < 1 ||
     query.trim().length > 254
   ) {
     throw new ApiError(
       400,
       "invalid-query",
-      "query must be between 2 and 254 characters.",
+      "query must be between 1 and 254 characters.",
     );
   }
   const users = extractLookupUsers(
@@ -235,6 +235,67 @@ async function lookupMailbox(email) {
       "No active YAGEO mailbox matched this email address.",
     );
   return { exists: true, email: normalizedEmail, user };
+}
+
+function normalizeRememberedProfile(email, value = {}) {
+  const text = (input, maxLength) =>
+    typeof input === "string" ? input.trim().slice(0, maxLength) : "";
+  return {
+    email,
+    organizer: text(value.organizer, 100),
+    department: text(value.department, 120),
+    employeeId: text(value.employeeId, 60),
+    deskNumber: text(value.deskNumber, 60),
+  };
+}
+
+async function getRememberedUserProfile(email) {
+  try {
+    const snapshot = await db.collection("userProfiles").doc(email).get();
+    if (snapshot.exists) {
+      return normalizeRememberedProfile(email, snapshot.data() || {});
+    }
+  } catch (cause) {
+    console.warn("Remembered user profile Firestore lookup failed", {
+      email,
+      message: cause?.message,
+    });
+  }
+
+  // Existing bookings are a useful migration fallback for profiles created
+  // before the dedicated profile document was introduced.
+  const connection = await pool.connect();
+  const result = await connection
+    .request()
+    .input("email", sql.NVarChar(254), email)
+    .query(`SELECT TOP 1 Email, Organizer, Department, EmployeeId, DeskNumber
+      FROM dbo.Bookings
+      WHERE LOWER(LTRIM(RTRIM(Email))) = @email
+      ORDER BY CreatedAt DESC, StartTime DESC, Id DESC;`);
+  const record = result.recordset[0];
+  return record
+    ? normalizeRememberedProfile(email, {
+        organizer: record.Organizer,
+        department: record.Department,
+        employeeId: record.EmployeeId,
+        deskNumber: record.DeskNumber,
+      })
+    : null;
+}
+
+async function saveRememberedUserProfile(profile) {
+  const normalized = normalizeRememberedProfile(profile.email, profile);
+  const fields = ["organizer", "department", "employeeId", "deskNumber"];
+  const payload = {
+    email: normalized.email,
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+  fields.forEach((field) => {
+    if (normalized[field]) payload[field] = normalized[field];
+  });
+  if (fields.some((field) => payload[field])) {
+    await db.collection("userProfiles").doc(normalized.email).set(payload, { merge: true });
+  }
 }
 
 async function getAdminAccount(username) {
@@ -1622,6 +1683,22 @@ async function createSqlBooking(input, requesterUid) {
     await transaction.rollback().catch(() => undefined);
     throw cause;
   }
+  try {
+    await saveRememberedUserProfile({
+      email,
+      organizer,
+      department,
+      employeeId,
+      deskNumber,
+    });
+  } catch (cause) {
+    // The booking is already committed. Keep it successful if the optional
+    // profile cache is temporarily unavailable; lookup can fall back to SQL.
+    console.warn("Could not persist remembered booking profile", {
+      email,
+      message: cause?.message,
+    });
+  }
   return {
     booking: {
       id,
@@ -2937,6 +3014,20 @@ const requestHandler = async (request, response) => {
       return json(response, 200, {
         success: true,
         data: { assignments: await listAdminMascotAssignments() },
+      });
+    }
+    if (
+      request.method === "GET" &&
+      url.pathname === "/api/user-profiles/lookup"
+    ) {
+      await requireFirebaseUser(request);
+      const email = assertYageoEmail(
+        url.searchParams.get("email") || "",
+        config.yageoDomain,
+      );
+      return json(response, 200, {
+        success: true,
+        data: { profile: await getRememberedUserProfile(email) },
       });
     }
     if (request.method === "GET" && url.pathname === "/api/mailboxes") {
