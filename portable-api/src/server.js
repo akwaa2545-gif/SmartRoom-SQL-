@@ -992,19 +992,19 @@ function buildLegacyReminderMessage(bookingId, booking, appUrl) {
 </html>`;
 }
 
-function buildReminderMessage(bookingId, booking, appUrl) {
+function buildBookingNotificationFields(bookingId, booking, appUrl) {
   const isTemplatePreview = booking.templatePreview === true;
-  const title = escapeHtml(
+  const title = String(
     booking.title || (isTemplatePreview ? "Sample booking template" : "TOKIN Smart Room booking"),
   );
-  const roomName = escapeHtml(
+  const roomName = String(
     booking.roomName || booking.roomId || (isTemplatePreview ? "Sample Meeting Room" : "Smart Room"),
   );
-  const organizer = escapeHtml(
+  const organizer = String(
     isTemplatePreview ? "-" : (booking.organizer || booking.email || "Room organizer"),
   );
-  const department = escapeHtml(isTemplatePreview ? "-" : (booking.department || "-"));
-  const displayBookingId = bookingId ? escapeHtml(bookingId) : "-";
+  const department = String(isTemplatePreview ? "-" : (booking.department || "-"));
+  const displayBookingId = bookingId ? String(bookingId) : "-";
   const ticketLabel = isTemplatePreview ? "TEMPLATE PREVIEW" : "BOOKING TICKET";
   const start = toDate(booking.startTime);
   const end = toDate(booking.endTime);
@@ -1021,10 +1021,299 @@ function buildReminderMessage(bookingId, booking, appUrl) {
     start && end
       ? `${start.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Bangkok" })} – ${end.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Bangkok" })}`
       : "See Smart Room for the scheduled time";
-  const safeAppUrl = escapeHtml(appUrl);
-  const logoUrl = escapeHtml(
-    new URL("/favicon.png", config.appBaseUrl).toString(),
-  );
+  return {
+    title,
+    roomName,
+    organizer,
+    department,
+    bookingId: displayBookingId,
+    ticketLabel,
+    bookingDate,
+    timeRange,
+    appUrl: String(appUrl),
+    logoUrl: new URL("/favicon.png", config.appBaseUrl).toString(),
+  };
+}
+
+function buildTeamsAdaptiveCard(bookingId, booking, appUrl) {
+  const fields = buildBookingNotificationFields(bookingId, booking, appUrl);
+  return JSON.stringify({
+    $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+    type: "AdaptiveCard",
+    version: "1.2",
+    body: [
+      {
+        type: "Container",
+        bleed: true,
+        items: [
+          {
+            type: "ColumnSet",
+            columns: [
+              {
+                type: "Column",
+                width: "auto",
+                items: [
+                  {
+                    type: "Image",
+                    url: fields.logoUrl,
+                    altText: "TOKIN Smart Room",
+                    size: "Small",
+                  },
+                ],
+              },
+              {
+                type: "Column",
+                width: "stretch",
+                verticalContentAlignment: "Center",
+                items: [
+                  {
+                    type: "TextBlock",
+                    text: "TOKIN",
+                    color: "Attention",
+                    size: "Medium",
+                    weight: "Bolder",
+                  },
+                  {
+                    type: "TextBlock",
+                    text: "Smart Room",
+                    size: "Small",
+                    isSubtle: true,
+                    spacing: "None",
+                  },
+                ],
+              },
+              {
+                type: "Column",
+                width: "auto",
+                verticalContentAlignment: "Center",
+                items: [
+                  {
+                    type: "TextBlock",
+                    text: fields.ticketLabel,
+                    color: "Attention",
+                    size: "Small",
+                    weight: "Bolder",
+                    wrap: true,
+                    horizontalAlignment: "Right",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        type: "Container",
+        spacing: "Large",
+        items: [
+          {
+            type: "TextBlock",
+            text: "STARTING SOON",
+            color: "Attention",
+            size: "Small",
+            weight: "Bolder",
+          },
+          {
+            type: "TextBlock",
+            text: "Your meeting starts in 15 minutes",
+            size: "Large",
+            weight: "Bolder",
+            wrap: true,
+            spacing: "Small",
+          },
+          {
+            type: "TextBlock",
+            text: "ห้องประชุมของคุณใกล้ถึงเวลาแล้ว กรุณาไปที่ห้องตามเวลาที่จองไว้",
+            wrap: true,
+            isSubtle: true,
+            spacing: "Small",
+          },
+        ],
+      },
+      {
+        type: "Container",
+        style: "emphasis",
+        spacing: "Medium",
+        items: [
+          {
+            type: "TextBlock",
+            text: "MEETING",
+            color: "Attention",
+            size: "Small",
+            weight: "Bolder",
+          },
+          {
+            type: "TextBlock",
+            text: fields.title,
+            size: "Medium",
+            weight: "Bolder",
+            wrap: true,
+            spacing: "Small",
+          },
+          {
+            type: "TextBlock",
+            text: `Room · ${fields.roomName}`,
+            color: "Attention",
+            weight: "Bolder",
+            wrap: true,
+            spacing: "Small",
+          },
+          {
+            type: "ColumnSet",
+            separator: true,
+            spacing: "Medium",
+            columns: [
+              {
+                type: "Column",
+                width: "stretch",
+                items: [
+                  {
+                    type: "TextBlock",
+                    text: "DATE",
+                    size: "Small",
+                    isSubtle: true,
+                    weight: "Bolder",
+                  },
+                  {
+                    type: "TextBlock",
+                    text: fields.bookingDate,
+                    weight: "Bolder",
+                    wrap: true,
+                    spacing: "Small",
+                  },
+                ],
+              },
+              {
+                type: "Column",
+                width: "stretch",
+                separator: true,
+                items: [
+                  {
+                    type: "TextBlock",
+                    text: "TIME",
+                    size: "Small",
+                    isSubtle: true,
+                    weight: "Bolder",
+                  },
+                  {
+                    type: "TextBlock",
+                    text: fields.timeRange,
+                    color: "Attention",
+                    weight: "Bolder",
+                    wrap: true,
+                    spacing: "Small",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        type: "Container",
+        spacing: "Medium",
+        items: [
+          {
+            type: "FactSet",
+            facts: [
+              { title: "Booked by", value: fields.organizer },
+              { title: "Department", value: fields.department },
+              { title: "Booking ID", value: fields.bookingId },
+            ],
+          },
+        ],
+      },
+      {
+        type: "ActionSet",
+        spacing: "Medium",
+        actions: [
+          {
+            type: "Action.OpenUrl",
+            title: "Open TOKIN Smart Room",
+            url: fields.appUrl,
+          },
+        ],
+      },
+      {
+        type: "Container",
+        style: "good",
+        spacing: "Medium",
+        items: [
+          {
+            type: "TextBlock",
+            text: "✓ ไม่ต้องกด Verify ใดๆ — ระบบจองห้องประชุมอัตโนมัติแล้ว เพียงไปที่ห้องประชุมตามเวลาที่นัดหมาย",
+            wrap: true,
+            color: "Good",
+          },
+          {
+            type: "TextBlock",
+            text: "No action is required. Simply arrive at the room on time.",
+            wrap: true,
+            size: "Small",
+            isSubtle: true,
+            spacing: "Small",
+          },
+        ],
+      },
+      {
+        type: "Container",
+        style: "emphasis",
+        spacing: "Medium",
+        items: [
+          {
+            type: "TextBlock",
+            text: "TOKIN Smart Room",
+            weight: "Bolder",
+          },
+          {
+            type: "TextBlock",
+            text: "Automated booking notification · Please do not reply to this message.",
+            size: "Small",
+            isSubtle: true,
+            wrap: true,
+            spacing: "Small",
+          },
+        ],
+      },
+    ],
+  });
+}
+
+function buildBookingFlowPayload({ email, bookingId, booking, subject, message }) {
+  return {
+    to: email,
+    email,
+    recipient: email,
+    recipientEmail: email,
+    To: email,
+    Email: email,
+    RecipientEmail: email,
+    subject,
+    Subject: subject,
+    body: message,
+    html: message,
+    message,
+    Body: message,
+    Html: message,
+    Message: message,
+    senderName: "TOKIN Smart Room",
+    teams: buildBookingNotificationFields(bookingId, booking, config.appBaseUrl),
+    teamsCard: buildTeamsAdaptiveCard(bookingId, booking, config.appBaseUrl),
+  };
+}
+
+function buildReminderMessage(bookingId, booking, appUrl) {
+  const fields = buildBookingNotificationFields(bookingId, booking, appUrl);
+  const title = escapeHtml(fields.title);
+  const roomName = escapeHtml(fields.roomName);
+  const organizer = escapeHtml(fields.organizer);
+  const department = escapeHtml(fields.department);
+  const displayBookingId = escapeHtml(fields.bookingId);
+  const ticketLabel = fields.ticketLabel;
+  const bookingDate = fields.bookingDate;
+  const timeRange = fields.timeRange;
+  const safeAppUrl = escapeHtml(fields.appUrl);
+  const logoUrl = escapeHtml(fields.logoUrl);
 
   return `<!doctype html>
 <html lang="th">
@@ -1358,24 +1647,13 @@ async function deliverBookingEmail(bookingId, booking) {
   const subject = `[TOKIN Smart Room] แจ้งเตือนห้องประชุม - ${booking.title || booking.roomName || bookingId} ใกล้ถึงเวลาแล้ว!`;
   const appUrl = config.appBaseUrl;
   const message = buildReminderMessage(bookingId, booking, appUrl);
-  const payload = {
-    to: email,
+  const payload = buildBookingFlowPayload({
     email,
-    recipient: email,
-    recipientEmail: email,
-    To: email,
-    Email: email,
-    RecipientEmail: email,
+    bookingId,
+    booking,
     subject,
-    Subject: subject,
-    body: message,
-    html: message,
     message,
-    Body: message,
-    Html: message,
-    Message: message,
-    senderName: "TOKIN Smart Room",
-  };
+  });
   try {
     await callFlow(config.emailFlowUrl, payload, "email");
   } catch (cause) {
@@ -1466,24 +1744,13 @@ async function deliverSqlBookingEmail(bookingId, booking) {
     }
     await callFlow(
       config.emailFlowUrl,
-      {
-        to: email,
+      buildBookingFlowPayload({
         email,
-        recipient: email,
-        recipientEmail: email,
-        To: email,
-        Email: email,
-        RecipientEmail: email,
+        bookingId,
+        booking,
         subject,
-        Subject: subject,
-        body: message,
-        html: message,
         message,
-        Body: message,
-        Html: message,
-        Message: message,
-        senderName: "TOKIN Smart Room",
-      },
+      }),
       "email",
     );
   } catch (cause) {
@@ -1633,20 +1900,17 @@ async function sendAdminTestEmail(email) {
   const bookingPreview = buildTemplateBookingPreview();
   const subject = "[TOKIN Smart Room] Booking template preview";
   const message = buildReminderMessage("", bookingPreview, config.appBaseUrl);
+  const payload = buildBookingFlowPayload({
+    email: recipient,
+    bookingId: "",
+    booking: bookingPreview,
+    subject,
+    message,
+  });
   try {
     await callFlow(
       config.emailFlowUrl,
-      {
-        to: recipient,
-        email: recipient,
-        recipient: recipient,
-        subject,
-        Subject: subject,
-        message,
-        body: message,
-        html: message,
-        senderName: "TOKIN Smart Room",
-      },
+      payload,
       "email",
     );
   } catch (cause) {
