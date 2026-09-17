@@ -754,35 +754,6 @@ exports.searchYageoMailboxes = onCall(USER_LOOKUP_HTTPS_OPTIONS, async (request)
   }
 });
 
-function sanitizeRememberedUserProfile(email, value = {}) {
-  const text = (input, maxLength) => typeof input === "string"
-    ? input.trim().slice(0, maxLength)
-    : "";
-  return {
-    email,
-    organizer: text(value.organizer, 100),
-    department: text(value.department, 120),
-    employeeId: text(value.employeeId, 60),
-    deskNumber: text(value.deskNumber, 60),
-  };
-}
-
-exports.lookupRememberedBookingProfile = onCall(USER_LOOKUP_HTTPS_OPTIONS, async (request) => {
-  try {
-    const email = assertYageoEmail(request.data?.email);
-    const snapshot = await db.collection("userProfiles").doc(email).get();
-    return {
-      profile: snapshot.exists
-        ? sanitizeRememberedUserProfile(email, snapshot.data() || {})
-        : null,
-    };
-  } catch (error) {
-    if (error instanceof HttpsError) throw error;
-    console.error("lookupRememberedBookingProfile failed", error);
-    throw new HttpsError("internal", "Remembered booking profile lookup failed.");
-  }
-});
-
 async function getRoomName(roomId) {
   if (!roomId || typeof roomId !== "string") return "";
 
@@ -3170,36 +3141,8 @@ exports.saveBookingWithConcurrency = onCall(APP_HTTPS_OPTIONS, async (request) =
     });
     if (conflict) throw new HttpsError("already-exists", "This room is already booked for the selected time.");
 
-    let rememberedProfile = null;
-    if (operation === "create") {
-      const profileEmail = typeof candidate.email === "string"
-        ? candidate.email.trim().toLowerCase()
-        : "";
-      if (/^[^\s@]+@yageo\.com$/i.test(profileEmail)) {
-        const profileRef = db.collection("userProfiles").doc(profileEmail);
-        const profileSnapshot = await transaction.get(profileRef);
-        rememberedProfile = {
-          ref: profileRef,
-          existing: profileSnapshot.exists ? profileSnapshot.data() || {} : {},
-          email: profileEmail,
-        };
-      }
-    }
-
     if (operation === "create") {
       transaction.create(bookingRef, candidate);
-      if (rememberedProfile) {
-        const profile = sanitizeRememberedUserProfile(rememberedProfile.email, candidate);
-        const nextProfile = {
-          ...rememberedProfile.existing,
-          email: profile.email,
-          updatedAt: FieldValue.serverTimestamp(),
-        };
-        ["organizer", "department", "employeeId", "deskNumber"].forEach((field) => {
-          if (profile[field]) nextProfile[field] = profile[field];
-        });
-        transaction.set(rememberedProfile.ref, nextProfile, { merge: true });
-      }
     } else transaction.update(bookingRef, changes);
   });
   return { success: true };

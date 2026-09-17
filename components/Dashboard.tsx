@@ -31,7 +31,7 @@ import ConfirmationModal from './ConfirmationModal';
 import { BOOKABLE_HOURS, BOOKING_START_HOUR, BOOKING_END_HOUR, DEPARTMENTS } from '../constants';
 import { functions } from '../firebase';
 import { BookingDisplayState, getBookingDisplayState as getSharedBookingDisplayState, isBookingNoCheckIn } from '../utils/bookingStatus';
-import { getPortableLeaderboard, getPortableUserProfile, isPortableMailApiEnabled, lookupPortableMailbox, PortableLeaderboard, searchPortableMailboxes } from '../utils/portableMailApi';
+import { getPortableLeaderboard, isPortableMailApiEnabled, lookupPortableMailbox, PortableLeaderboard, searchPortableMailboxes } from '../utils/portableMailApi';
 import { calculateLeaderboardStats, getLeaderboardHonorInfo } from '../utils/leaderboardStats';
 import { MascotAssignments, normalizeMascotEmail } from '../utils/mascots';
 import LeaderboardPanel, { AssignedMascot, LeaderboardBookingBadge } from './LeaderboardPanel';
@@ -60,40 +60,11 @@ interface YageoMailboxUser {
   userPrincipalName?: string;
   department?: string;
   jobTitle?: string;
-  employeeId?: string;
-  deskNumber?: string;
-  rememberedProfile?: RememberedUserProfile;
-}
-
-interface RememberedUserProfile {
-  email: string;
-  organizer: string;
-  department: string;
-  employeeId: string;
-  deskNumber: string;
-  savedAt: number;
 }
 
 const getMailboxEmail = (user: YageoMailboxUser) => (
   user.mail || user.userPrincipalName || ''
 ).trim().toLowerCase();
-
-const getBookingProfileTimestamp = (booking: Booking) => {
-  const values = [booking.createdAt, booking.startTime];
-  for (const value of values) {
-    try {
-      const date = value && typeof value.toDate === 'function'
-        ? value.toDate()
-        : new Date(value);
-      if (date instanceof Date && !Number.isNaN(date.getTime())) {
-        return date.getTime();
-      }
-    } catch {
-      // Continue with the next available timestamp.
-    }
-  }
-  return 0;
-};
 
 const Dashboard: React.FC<DashboardProps> = ({
   rooms,
@@ -223,50 +194,6 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [isLeaderboardLoading, setIsLeaderboardLoading] = useState(isPortableMailApiEnabled());
   const emailLookupRequestIdRef = useRef(0);
 
-  // A completed booking is also the user's remembered profile. Keeping the
-  // latest non-empty values here makes the suggestions work across browsers
-  // and devices without adding another profile form or local-only storage.
-  const rememberedProfileByEmail = useMemo(() => {
-    const profiles = new Map<string, RememberedUserProfile>();
-    const orderedBookings = [...bookings].sort(
-      (a, b) => getBookingProfileTimestamp(b) - getBookingProfileTimestamp(a),
-    );
-
-    orderedBookings.forEach((booking) => {
-      const emailKey = (booking.email || '').trim().toLowerCase();
-      if (!emailKey || !/^[^\s@]+@yageo\.com$/i.test(emailKey)) return;
-
-      const current = profiles.get(emailKey) || {
-        email: emailKey,
-        organizer: '',
-        department: '',
-        employeeId: '',
-        deskNumber: '',
-        savedAt: getBookingProfileTimestamp(booking),
-      };
-
-      if (!current.organizer && booking.organizer?.trim()) current.organizer = booking.organizer.trim();
-      if (!current.department && booking.department?.trim()) current.department = booking.department.trim();
-      if (!current.employeeId && booking.employeeId?.trim()) current.employeeId = booking.employeeId.trim();
-      if (!current.deskNumber && booking.deskNumber?.trim()) current.deskNumber = booking.deskNumber.trim();
-      profiles.set(emailKey, current);
-    });
-
-    return profiles;
-  }, [bookings]);
-
-  const rememberedProfileSuggestions = useMemo<YageoMailboxUser[]>(
-    () => [...rememberedProfileByEmail.values()].map((profile) => ({
-      displayName: profile.organizer || profile.email,
-      mail: profile.email,
-      department: profile.department,
-      employeeId: profile.employeeId,
-      deskNumber: profile.deskNumber,
-      rememberedProfile: profile,
-    })),
-    [rememberedProfileByEmail],
-  );
-
   useEffect(() => {
     if (!isPortableMailApiEnabled()) return;
     let active = true;
@@ -390,32 +317,12 @@ const Dashboard: React.FC<DashboardProps> = ({
 
         const data = response.data as { users?: YageoMailboxUser[] };
         const directoryUsers = Array.isArray(data.users) ? data.users : [];
-        const normalizedQuery = query.toLowerCase();
-        const rememberedUsers = rememberedProfileSuggestions.filter((user) => {
-          const mailboxEmail = getMailboxEmail(user);
-          return mailboxEmail.includes(normalizedQuery) ||
-            (user.displayName || '').toLowerCase().includes(normalizedQuery);
-        });
-        const mergedUsers = new Map<string, YageoMailboxUser>();
-        [...directoryUsers, ...rememberedUsers].forEach((user) => {
-          const mailboxEmail = getMailboxEmail(user);
-          if (!mailboxEmail || mergedUsers.has(mailboxEmail)) return;
-          const profile = rememberedProfileByEmail.get(mailboxEmail);
-          mergedUsers.set(mailboxEmail, profile
-            ? { ...user, employeeId: profile.employeeId, deskNumber: profile.deskNumber, rememberedProfile: profile }
-            : user);
-        });
-        setEmailSuggestions([...mergedUsers.values()].slice(0, 10));
+        setEmailSuggestions(directoryUsers.slice(0, 10));
         setIsEmailSuggestionsOpen(true);
       } catch (error) {
         if (emailLookupRequestIdRef.current !== requestId) return;
         console.error('YAGEO mailbox search failed:', error);
-        const normalizedQuery = query.toLowerCase();
-        setEmailSuggestions(rememberedProfileSuggestions.filter((user) => {
-          const mailboxEmail = getMailboxEmail(user);
-          return mailboxEmail.includes(normalizedQuery) ||
-            (user.displayName || '').toLowerCase().includes(normalizedQuery);
-        }).slice(0, 10));
+        setEmailSuggestions([]);
         setIsEmailSuggestionsOpen(true);
       } finally {
         if (emailLookupRequestIdRef.current === requestId) {
@@ -425,7 +332,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     }, 350);
 
     return () => window.clearTimeout(timeout);
-  }, [email, rememberedProfileByEmail, rememberedProfileSuggestions, selectedEmailUser]);
+  }, [email, selectedEmailUser]);
 
   // Define bookable blocks: 07:00 - 19:00, with the last selectable block ending at 19:00.
   const hours = useMemo(() => BOOKABLE_HOURS, []);
@@ -749,18 +656,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
-  const getMailboxFirstName = (user: YageoMailboxUser) => {
-    const mailbox = getMailboxEmail(user);
-    const localPart = mailbox.split('@')[0] || '';
-    const emailFirstName = localPart.split(/[._-]+/).find(Boolean);
-    if (emailFirstName) {
-      return emailFirstName.charAt(0).toUpperCase() + emailFirstName.slice(1);
-    }
-
-    const displayFirstName = user.displayName?.trim().split(/\s+/).find(Boolean);
-    return displayFirstName || '';
-  };
-
   const getMailboxInitials = (user: YageoMailboxUser) => {
     const label = user.displayName || getMailboxEmail(user);
     const words = label.split(/[\s.]+/).filter(Boolean);
@@ -773,33 +668,9 @@ const Dashboard: React.FC<DashboardProps> = ({
     [user.jobTitle, user.department].map(value => value?.trim()).filter(Boolean).join(' - ')
   );
 
-  const getMailboxDepartmentValue = (mailboxDepartment?: string) => {
-    const normalized = formatDepartment(mailboxDepartment);
-    if (!normalized) return '';
-    return getDepartmentSelectOptions(DEPARTMENTS).find(({ label }) => label === normalized)?.value || '';
-  };
-
-  const handleSelectEmailSuggestion = async (user: YageoMailboxUser) => {
+  const handleSelectEmailSuggestion = (user: YageoMailboxUser) => {
     const selectedEmail = getMailboxEmail(user);
     if (!selectedEmail) return;
-    let rememberedProfile = rememberedProfileByEmail.get(selectedEmail) || user.rememberedProfile;
-
-    // Bookings loaded into the dashboard cover most cases. Ask the server for
-    // the durable profile as well, so it still works after old bookings leave
-    // the schedule or when the browser has not loaded the full history yet.
-    if (!rememberedProfile) {
-      try {
-        const response = isPortableMailApiEnabled()
-          ? await getPortableUserProfile(selectedEmail)
-          : (await httpsCallable(functions, 'lookupRememberedBookingProfile')({ email: selectedEmail })).data as { profile?: RememberedUserProfile | null };
-        rememberedProfile = response.profile || undefined;
-      } catch (error) {
-        console.warn('Remembered booking profile lookup failed:', error);
-      }
-    }
-
-    const rememberedDepartment = getMailboxDepartmentValue(rememberedProfile?.department);
-    const mailboxDepartment = getMailboxDepartmentValue(user.department);
 
     const emailCard = (
       <div className="mt-3 flex items-center gap-3.5 rounded-2xl border border-slate-200 bg-slate-50 p-3.5 shadow-sm text-left">
@@ -816,11 +687,6 @@ const Dashboard: React.FC<DashboardProps> = ({
           {getMailboxRoleLine(user) && (
             <div className="truncate text-xs font-bold uppercase tracking-wide text-indigo-600 mt-1">
               {getMailboxRoleLine(user)}
-            </div>
-          )}
-          {rememberedProfile && (
-            <div className="mt-2 text-xs font-bold text-emerald-700">
-              Saved booking details found: Employee ID {rememberedProfile.employeeId || '-'} · Desk {rememberedProfile.deskNumber || '-'}
             </div>
           )}
         </div>
@@ -841,16 +707,13 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
       ),
       onConfirm: () => {
-        setSelectedEmailUser(rememberedProfile ? { ...user, rememberedProfile } : user);
+        setSelectedEmailUser(user);
         setEmail(selectedEmail);
-        setOrganizer(rememberedProfile?.organizer || getMailboxFirstName(user));
-        setEmployeeId(rememberedProfile?.employeeId || '');
-        setDeskNumber(rememberedProfile?.deskNumber || '');
-        const departmentValue = rememberedDepartment || mailboxDepartment;
-        if (departmentValue) {
-          setDepartment(departmentValue);
-          setIsDepartmentManuallySelected(false);
-        }
+        setOrganizer('');
+        setDepartment('');
+        setEmployeeId('');
+        setDeskNumber('');
+        setIsDepartmentManuallySelected(false);
         setEmailSuggestions([]);
         setIsEmailSuggestionsOpen(false);
         setBookingError(null);
@@ -2228,11 +2091,6 @@ const Dashboard: React.FC<DashboardProps> = ({
                           {getMailboxRoleLine(selectedEmailUser)}
                         </div>
                       )}
-                      {selectedEmailUser.rememberedProfile && (
-                        <div className="mt-1 truncate text-xs font-bold text-emerald-700">
-                          Remembered details filled automatically
-                        </div>
-                      )}
                     </div>
                     <button
                       type="button"
@@ -2247,11 +2105,6 @@ const Dashboard: React.FC<DashboardProps> = ({
                       Remove
                     </button>
                   </div>
-                )}
-                {selectedEmailUser && getMailboxDepartmentValue(selectedEmailUser.department) && !isDepartmentManuallySelected && (
-                  <p className="mt-2 text-xs font-semibold text-emerald-700">
-                    {language === 'th' ? 'เลือกระบบแผนกจากข้อมูลอีเมลแล้ว คุณสามารถเปลี่ยนได้ด้านล่าง' : 'Department was filled from the email profile. You can change it below.'}
-                  </p>
                 )}
                 {isEmailSuggestionsOpen && (
                   <div

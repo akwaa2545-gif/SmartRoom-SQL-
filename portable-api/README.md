@@ -15,8 +15,6 @@ This service runs on a domain-joined Windows PC, uses the local SQL Server only 
 9. Run `sql/010_admin_sessions.sql` once to enable the Super Admin Admin Activity view. It records short-lived session presence, the server-observed IP address, and a coarse browser/device label; it never records passwords or session tokens.
 10. Run `start-api.cmd` for a manual test. It deliberately listens only on `127.0.0.1:8787`; do not expose the Node port or SQL Server directly. The host setup script creates a Windows startup task that relaunches the API after a reboot or unexpected stop.
 
-Completed booking details are also kept as a small server-side profile in the app Firestore database. This lets the booking form restore the organizer, department, Employee ID, and desk number across browsers and devices; no additional SQL table is required.
-
 For Windows 11, use `setup-direct-https.cmd PFX_PATH ALLOWED_NETWORK API_IP API_HOSTNAME` instead of IIS/ARR. It runs Node.js directly as HTTPS using the exported PFX certificate, configures the corporate-only firewall rule, and creates the startup task.
 
 For an alternative Windows-domain/IIS-only Admin deployment (do not combine this with the PC API password login below), run this from an elevated Command Prompt:
