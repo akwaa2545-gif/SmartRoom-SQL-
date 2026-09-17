@@ -664,6 +664,25 @@ const Dashboard: React.FC<DashboardProps> = ({
     return `${words[0][0]}${words[1][0]}`.toUpperCase();
   };
 
+  const getMailboxFirstName = (user: YageoMailboxUser) => {
+    const displayFirstName = user.displayName?.trim().split(/\s+/).find(Boolean);
+    if (displayFirstName) return displayFirstName;
+
+    const localPart = getMailboxEmail(user).split('@')[0] || '';
+    const emailFirstName = localPart.split(/[._-]+/).find(Boolean);
+    if (!emailFirstName) return '';
+
+    return emailFirstName.charAt(0).toUpperCase() + emailFirstName.slice(1);
+  };
+
+  const getMailboxDepartmentValue = (mailboxDepartment?: string) => {
+    const normalizedDepartment = formatDepartment(mailboxDepartment);
+    if (!normalizedDepartment) return '';
+
+    return getDepartmentSelectOptions(DEPARTMENTS)
+      .find(({ label }) => label === normalizedDepartment)?.value || '';
+  };
+
   const getMailboxRoleLine = (user: YageoMailboxUser) => (
     [user.jobTitle, user.department].map(value => value?.trim()).filter(Boolean).join(' - ')
   );
@@ -671,6 +690,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const handleSelectEmailSuggestion = (user: YageoMailboxUser) => {
     const selectedEmail = getMailboxEmail(user);
     if (!selectedEmail) return;
+    const mailboxDepartment = getMailboxDepartmentValue(user.department);
 
     const emailCard = (
       <div className="mt-3 flex items-center gap-3.5 rounded-2xl border border-slate-200 bg-slate-50 p-3.5 shadow-sm text-left">
@@ -709,8 +729,8 @@ const Dashboard: React.FC<DashboardProps> = ({
       onConfirm: () => {
         setSelectedEmailUser(user);
         setEmail(selectedEmail);
-        setOrganizer('');
-        setDepartment('');
+        setOrganizer(getMailboxFirstName(user));
+        setDepartment(mailboxDepartment);
         setEmployeeId('');
         setDeskNumber('');
         setIsDepartmentManuallySelected(false);
