@@ -356,6 +356,7 @@
       @keyframes mascotWave { 0%,100%{transform:rotate(-5deg)}50%{transform:rotate(12deg) translateY(-3px)} }
       @keyframes mascotSparkle { 0%,100%{transform:scale(0.9);filter:drop-shadow(0 0 0 #facc15)}50%{transform:scale(1.15);filter:drop-shadow(0 0 6px #facc15)} }
       @keyframes mascotMinion { 0%,100%{transform:translateY(0) rotate(-4deg)}25%{transform:translateY(-4px) rotate(4deg)}50%{transform:translateY(-1px) rotate(-4deg)}75%{transform:translateY(-5px) rotate(4deg)} }
+      @keyframes mascotHoverJump { 0%,100%{transform:translateY(0) rotate(0deg) scale(1)}25%{transform:translateY(-5px) rotate(-10deg) scale(1.06)}50%{transform:translateY(-8px) rotate(10deg) scale(1.1)}75%{transform:translateY(-4px) rotate(-7deg) scale(1.04)} }
       .mascot-dance { animation:mascotDance .8s ease-in-out infinite; }
       .mascot-waddle { animation:mascotWaddle .7s ease-in-out infinite; }
       .mascot-hop { animation:mascotHop .75s cubic-bezier(.34,1.56,.64,1) infinite; }
@@ -367,6 +368,7 @@
       .mascot-sparkle { animation:mascotSparkle 1.1s ease-in-out infinite; }
       .mascot-minion { animation:mascotMinion .78s ease-in-out infinite; }
       .mascot-resting { opacity:.72; animation:catSleepingBreathe 2.4s ease-in-out infinite; }
+      .mascot-hover-jump:hover { animation:mascotHoverJump .62s cubic-bezier(.34,1.56,.64,1) infinite; }
 
       @media (prefers-reduced-motion: reduce) {
         .booking-it-neon,
@@ -387,7 +389,7 @@
         .pet-companion-two,
         .mascot-dance, .mascot-waddle, .mascot-hop, .mascot-sway,
         .mascot-roll, .mascot-spin, .mascot-dash, .mascot-wave,
-        .mascot-sparkle, .mascot-minion, .mascot-resting {
+        .mascot-sparkle, .mascot-minion, .mascot-resting, .mascot-hover-jump {
           animation: none !important;
         }
       }

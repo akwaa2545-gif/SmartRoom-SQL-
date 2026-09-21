@@ -1380,7 +1380,7 @@ export const AssignedMascot: React.FC<{
   return (
     <span
       title={`${mascot.label}${isUsed ? ' · resting' : ''}`}
-      className={`relative inline-flex h-7 w-7 shrink-0 cursor-default items-center justify-center rounded-full border border-white/80 bg-white/90 text-base shadow-sm ${isUsed ? 'mascot-resting' : mascot.animation} ${className}`}
+      className={`relative inline-flex h-7 w-7 shrink-0 cursor-default items-center justify-center bg-transparent text-base transition-transform mascot-hover-jump ${isUsed ? 'mascot-resting' : ''} ${className}`}
       aria-label={mascot.label}
     >
       <MascotIcon mascotId={mascotId} size={22} />
