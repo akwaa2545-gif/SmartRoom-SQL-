@@ -126,7 +126,22 @@ const MascotIcon: React.FC<MascotIconProps> = ({ mascotId, size = 24, className 
     }
   })();
 
-  return <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" className={`inline-block overflow-visible align-middle ${className}`} role="img" aria-label={mascot.label}>{artwork}<Blush /></svg>;
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" className={`inline-block overflow-visible align-middle ${className}`} role="img" aria-label={mascot.label}>
+      {sleeping && (
+        <>
+          <ellipse cx="32" cy="57" rx="24" ry="4" fill="#334155" opacity=".18" />
+          <path d="M8 49C12 43 23 43 28 48V58H11C8 56 7 52 8 49Z" fill="#BFDBFE" stroke="#60A5FA" strokeWidth="1.2" />
+          <path d="M11 51C16 48 21 48 25 51" fill="none" stroke="#EFF6FF" strokeWidth="1.6" strokeLinecap="round" />
+        </>
+      )}
+      <g transform={sleeping ? 'translate(1 7) rotate(-18 32 40)' : undefined}>
+        {artwork}
+        {!sleeping && <Blush />}
+      </g>
+      {sleeping && <path d="M43 48Q47 51 51 48" fill="none" stroke="#475569" strokeWidth="1.2" strokeLinecap="round" opacity=".6" />}
+    </svg>
+  );
 };
 
 export default MascotIcon;
