@@ -31,6 +31,13 @@ const Eyes: React.FC<EyesProps> = ({ sleeping, left = 25, right = 39, y = 25 }) 
   )
 );
 
+const Blush: React.FC = () => (
+  <>
+    <ellipse cx="20" cy="33" rx="4.2" ry="2.1" fill="#FB7185" opacity=".42" />
+    <ellipse cx="44" cy="33" rx="4.2" ry="2.1" fill="#FB7185" opacity=".42" />
+  </>
+);
+
 /** Full-body, code-native mascot art for booking cards and admin tools. */
 const MascotIcon: React.FC<MascotIconProps> = ({ mascotId, size = 24, className = '', sleeping = false }) => {
   const mascot = getMascotOption(mascotId);
@@ -119,7 +126,7 @@ const MascotIcon: React.FC<MascotIconProps> = ({ mascotId, size = 24, className 
     }
   })();
 
-  return <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" className={`inline-block overflow-visible align-middle ${className}`} role="img" aria-label={mascot.label}>{artwork}</svg>;
+  return <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" className={`inline-block overflow-visible align-middle ${className}`} role="img" aria-label={mascot.label}>{artwork}<Blush /></svg>;
 };
 
 export default MascotIcon;
