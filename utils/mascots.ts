@@ -2,6 +2,7 @@ export const MASCOT_OPTIONS = [
   { id: 'king-cat', label: 'King Cat', emoji: '🐱', animation: 'mascot-dance' },
   { id: 'penguin', label: 'Waddling Penguin', emoji: '🐧', animation: 'mascot-waddle' },
   { id: 'bunny', label: 'Bouncy Bunny', emoji: '🐰', animation: 'mascot-hop' },
+  { id: 'pig', label: 'Playful Pig', emoji: '🐷', animation: 'mascot-hop' },
   { id: 'fox', label: 'Clever Fox', emoji: '🦊', animation: 'mascot-sway' },
   { id: 'panda', label: 'Happy Panda', emoji: '🐼', animation: 'mascot-roll' },
   { id: 'shiba', label: 'Shiba Star', emoji: '🐕', animation: 'mascot-spin' },
@@ -13,6 +14,14 @@ export const MASCOT_OPTIONS = [
 
 export type MascotId = typeof MASCOT_OPTIONS[number]['id'];
 export type MascotAssignments = Record<string, MascotId>;
+
+export const MONTHLY_LEADERBOARD_MASCOTS: readonly MascotId[] = [
+  'king-cat',
+  'bunny',
+  'pig',
+  'penguin',
+  'panda',
+];
 
 export const isMascotId = (value: unknown): value is MascotId =>
   typeof value === 'string' && MASCOT_OPTIONS.some((mascot) => mascot.id === value);

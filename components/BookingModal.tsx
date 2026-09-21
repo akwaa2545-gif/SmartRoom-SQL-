@@ -441,7 +441,7 @@ const BookingModal: React.FC<BookingModalProps> = ({ room, existingBookings, isO
                                         value={organizer}
                                         onChange={(e) => setOrganizer(e.target.value)}
                                         className="w-full pl-9 pr-3 py-2.5 text-base sm:text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-                                        placeholder={language === 'th' ? "Somchai" : "Somchai"}
+                                        placeholder={language === 'th' ? "Name" : "Name"}
                                     />
                                 </div>
                             </div>

@@ -244,7 +244,7 @@ export const calculateLeaderboardStats = (
   const users: UserLeaderboardItem[] = Array.from(userMap.values())
     .sort(
       (a, b) =>
-        b.totalMinutes - a.totalMinutes || b.totalBookings - a.totalBookings,
+        b.totalBookings - a.totalBookings || b.totalMinutes - a.totalMinutes,
     )
     .map((item, index) => ({
       rank: index + 1,

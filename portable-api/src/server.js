@@ -11,6 +11,7 @@ const { createHealthResponse } = require("./health");
 const {
   currentBangkokMonth,
   leaderboardEntries,
+  monthlyMascotRewards,
   rankedLeaderboardRows,
   leaderboardScoresQuery,
 } = require("./leaderboard");
@@ -51,7 +52,7 @@ const ADMIN_SESSION_ACTIVE_WINDOW_MS = 5 * 60 * 1000;
 const ADMIN_SESSION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 let adminActivityWarningShown = false;
 const MASCOT_IDS = new Set([
-  "king-cat", "penguin", "bunny", "fox", "panda",
+  "king-cat", "penguin", "bunny", "pig", "fox", "panda",
   "shiba", "hamster", "otter", "unicorn", "minion",
 ]);
 
@@ -2357,20 +2358,42 @@ async function deleteSqlBooking(input) {
 }
 
 async function listMascotAssignments() {
+  const { start, end } = currentBangkokMonth();
   const connection = await pool.connect();
-  const result = await connection.request().query(
+  const [manualResult, leaderboardResult] = await Promise.all([
+    connection.request().query(
     "SELECT Email, MascotId FROM dbo.MascotEmailAssignments ORDER BY Email ASC;",
-  );
-  return result.recordset.flatMap((record) => {
+    ),
+    connection
+      .request()
+      .input("periodStart", sql.DateTime2, start)
+      .input("periodEnd", sql.DateTime2, end)
+      .input("now", sql.DateTime2, new Date())
+      .query(leaderboardScoresQuery()),
+  ]);
+
+  const assignments = new Map();
+  for (const reward of monthlyMascotRewards(leaderboardResult.recordset)) {
+    try {
+      assignments.set(assertYageoEmail(reward.email, config.yageoDomain), reward.mascotId);
+    } catch {
+      // A legacy leaderboard row without a valid corporate mailbox cannot receive a mascot.
+    }
+  }
+
+  for (const record of manualResult.recordset) {
     let email = "";
     try {
       email = assertYageoEmail(record.Email, config.yageoDomain);
     } catch {
-      return [];
+      continue;
     }
     const mascotId = typeof record.MascotId === "string" ? record.MascotId.trim() : "";
-    return MASCOT_IDS.has(mascotId) ? [{ email, mascotId }] : [];
-  });
+    if (MASCOT_IDS.has(mascotId)) assignments.set(email, mascotId);
+  }
+
+  return Array.from(assignments, ([email, mascotId]) => ({ email, mascotId }))
+    .sort((left, right) => left.email.localeCompare(right.email));
 }
 
 async function listAdminMascotAssignments() {

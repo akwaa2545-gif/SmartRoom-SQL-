@@ -5,7 +5,7 @@ import { PortableLeaderboard } from '../utils/portableMailApi';
 import { calculateLeaderboardStats, formatDurationHours, LeaderboardPeriod, UserLeaderboardItem, getLeaderboardHonorInfo } from '../utils/leaderboardStats';
 import { formatDepartment } from '../translations';
 import { getBookingDepartmentBadgeClass } from '../bookingVisualStyles';
-import { MascotId, getMascotOption } from '../utils/mascots';
+import { MascotAssignments, MascotId, getMascotOption, normalizeMascotEmail } from '../utils/mascots';
 import MascotIcon from './MascotIcon';
 
 interface LeaderboardPanelProps {
@@ -14,6 +14,7 @@ interface LeaderboardPanelProps {
   language: 'th' | 'en';
   bookings?: Booking[];
   rooms?: Room[];
+  mascotAssignments?: MascotAssignments;
   onViewFullLeaderboard?: () => void;
 }
 
@@ -44,6 +45,7 @@ const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({
   language,
   bookings = [],
   rooms = [],
+  mascotAssignments = {},
   onViewFullLeaderboard,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -100,6 +102,10 @@ const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({
   }, [isOpen]);
 
   const topThreeUsers = useMemo(() => stats.users.slice(0, 3), [stats.users]);
+  const getUserMascot = (email?: string) => {
+    const mascotId = mascotAssignments[normalizeMascotEmail(email)];
+    return mascotId ? getMascotOption(mascotId) : null;
+  };
 
   const filteredUsers = useMemo(() => {
     if (!searchQuery.trim()) return stats.users;
@@ -372,9 +378,9 @@ const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({
                         <span className="text-base shrink-0 select-none">🎯</span>
                         <p className="text-[10.5px] font-semibold text-slate-700 leading-snug">
                           {language === 'th' ? (
-                            <>มาสคอตจะแสดงเฉพาะรายการจองของผู้ใช้ที่ผู้ดูแลระบบกำหนดเท่านั้น และไม่มีการแจกมาสคอตอัตโนมัติตามแผนก</>
+                            <>ผู้ใช้ที่มีการจองและยืนยันแล้วสูงสุด 5 อันดับประจำเดือน จะได้รับมาสคอตอัตโนมัติตามอันดับ: King Cat, Bunny, Pig, Penguin และ Panda ผู้ดูแลระบบสามารถกำหนดมาสคอตอื่นแทนได้</>
                           ) : (
-                            <>Mascots appear only on bookings for users assigned by an administrator; departments receive no automatic mascot.</>
+                            <>The monthly top five verified bookers automatically receive King Cat, Bunny, Pig, Penguin, then Panda. An administrator can assign a different mascot at any time.</>
                           )}
                         </p>
                       </div>
@@ -392,6 +398,7 @@ const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({
                   ) : (
                     filteredUsers.map((user) => {
                       const honor = getLeaderboardHonorInfo(user.rank, language);
+                      const mascot = period === 'current_month' ? getUserMascot(user.email) : null;
                       return (
                         <div
                           key={`${user.rank}-${user.name}`}
@@ -425,6 +432,11 @@ const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({
                                   <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[9px] font-black tracking-tight ${honor.badgeClass}`}>
                                     <span>{honor.icon}</span>
                                     <span>{honor.shortTitle}</span>
+                                  </span>
+                                )}
+                                {mascot && (
+                                  <span title={`Mascot: ${mascot.label}`} className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5">
+                                    <MascotIcon mascotId={mascot.id} size={16} />
                                   </span>
                                 )}
                               </div>

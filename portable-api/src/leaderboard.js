@@ -17,6 +17,14 @@ const EXCLUDED_LEADERBOARD_EMAILS = new Set([
   'usani.chansod@yageo.com',
 ]);
 
+const MONTHLY_LEADERBOARD_MASCOTS = Object.freeze([
+  'king-cat',
+  'bunny',
+  'pig',
+  'penguin',
+  'panda',
+]);
+
 function leaderboardScoresQuery() {
   // DATEDIFF is supported by the SQL Server versions used by the on-prem API.
   // Room bookings are short-lived, so minute totals cannot approach its range.
@@ -66,8 +74,8 @@ function rankedLeaderboardRows(rows) {
       bookings: Math.max(0, Number(row.BookingCount) || 0),
     }))
     .sort((left, right) =>
-      right.minutes - left.minutes ||
       right.bookings - left.bookings ||
+      right.minutes - left.minutes ||
       left.displayName.localeCompare(right.displayName),
     )
     .slice(0, 5);
@@ -78,4 +86,25 @@ function leaderboardEntries(rows) {
   return rankedLeaderboardRows(rows).map(({ emailKey, ...entry }) => entry);
 }
 
-module.exports = { currentBangkokMonth, leaderboardEntries, rankedLeaderboardRows, leaderboardScoresQuery, EXCLUDED_LEADERBOARD_EMAILS };
+function monthlyMascotRewards(rows) {
+  return rankedLeaderboardRows(rows).flatMap((entry) => {
+    const emailPrefix = 'email:';
+    if (!entry.emailKey.startsWith(emailPrefix)) return [];
+
+    const email = entry.emailKey.slice(emailPrefix.length).trim().toLowerCase();
+    const mascotId = MONTHLY_LEADERBOARD_MASCOTS[entry.rank - 1];
+    if (!email || !mascotId) return [];
+
+    return [{ email, mascotId, rank: entry.rank }];
+  });
+}
+
+module.exports = {
+  currentBangkokMonth,
+  leaderboardEntries,
+  rankedLeaderboardRows,
+  leaderboardScoresQuery,
+  monthlyMascotRewards,
+  MONTHLY_LEADERBOARD_MASCOTS,
+  EXCLUDED_LEADERBOARD_EMAILS,
+};

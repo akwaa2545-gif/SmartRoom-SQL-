@@ -3570,7 +3570,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         <div className="space-y-6 animate-in fade-in zoom-in-95 duration-200">
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="flex items-center text-lg font-black text-slate-900"><Sparkles className="mr-2 h-5 w-5 text-amber-500" />Mascot Assignments</h2>
-            <p className="mt-1 text-sm font-medium text-slate-500">Only an administrator can assign one of 10 animated mascots to an individual YAGEO email address. Mascots are not assigned automatically by user ranking or department.</p>
+            <p className="mt-1 text-sm font-medium text-slate-500">The monthly top five verified bookers automatically receive King Cat, Bunny, Pig, Penguin, and Panda by rank. A Super Admin can manually assign any mascot; the manual choice overrides the automatic reward.</p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">

@@ -1031,6 +1031,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           bookings={bookings}
           rooms={rooms}
           onViewFullLeaderboard={onNavigateToLeaderboard}
+          mascotAssignments={mascotAssignments}
         />
       </div>
 
@@ -2008,7 +2009,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                     required
                     value={organizer}
                     onChange={(e) => setOrganizer(e.target.value)}
-                    placeholder={language === 'th' ? 'Somchai' : 'Somchai'}
+                    placeholder={language === 'th' ? 'Name' : 'Name'}
                     className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 font-medium text-slate-800"
                   />
                 </div>
@@ -2088,7 +2089,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                   }}
                   onFocus={() => setIsEmailSuggestionsOpen(!selectedEmailUser && email.trim().length >= 1)}
                   onBlur={() => window.setTimeout(() => setIsEmailSuggestionsOpen(false), 150)}
-                  placeholder="Somchai.Jaidee@yageo.com"
+                  placeholder="Name@yageo.com"
                   role="combobox"
                   aria-expanded={isEmailSuggestionsOpen}
                   aria-controls="yageo-email-suggestions"

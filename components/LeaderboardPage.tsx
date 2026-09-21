@@ -6,11 +6,14 @@ import { calculateLeaderboardStats, formatDurationHours, LeaderboardPeriod, getL
 import { formatDepartment } from '../translations';
 import { getBookingDepartmentBadgeClass } from '../bookingVisualStyles';
 import { DEPARTMENTS } from '../constants';
+import { MascotAssignments, getMascotOption, normalizeMascotEmail } from '../utils/mascots';
+import MascotIcon from './MascotIcon';
 
 interface LeaderboardPageProps {
   language: 'th' | 'en';
   bookings?: Booking[];
   rooms?: Room[];
+  mascotAssignments?: MascotAssignments;
   onNavigateBack?: () => void;
 }
 
@@ -32,6 +35,7 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
   language,
   bookings = [],
   rooms = [],
+  mascotAssignments = {},
   onNavigateBack
 }) => {
   const [leaderboardApi, setLeaderboardApi] = useState<PortableLeaderboard | null>(null);
@@ -108,6 +112,10 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
   const topTwentyRooms = useMemo(() => stats.rooms.slice(0, 20), [stats.rooms]);
   const topTwentyDepartments = useMemo(() => stats.departments.slice(0, 20), [stats.departments]);
   const topThree = useMemo(() => stats.users.slice(0, 3), [stats.users]);
+  const getUserMascot = (email?: string) => {
+    const mascotId = mascotAssignments[normalizeMascotEmail(email)];
+    return mascotId ? getMascotOption(mascotId) : null;
+  };
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 pb-12">
@@ -282,9 +290,9 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
                 <span className="text-lg shrink-0 select-none">🎯</span>
                 <div className="text-[11.5px] font-semibold text-slate-700 leading-snug">
                   {language === 'th' ? (
-                    <>มาสคอตจะแสดงเฉพาะรายการจองของผู้ใช้ที่ผู้ดูแลระบบกำหนดเท่านั้น และไม่มีการแจกมาสคอตอัตโนมัติตามแผนก</>
+                    <>ผู้ใช้ที่มีการจองและยืนยันแล้วสูงสุด 5 อันดับประจำเดือน จะได้รับมาสคอตอัตโนมัติตามอันดับ: King Cat, Bunny, Pig, Penguin และ Panda ผู้ดูแลระบบสามารถกำหนดมาสคอตอื่นแทนได้</>
                   ) : (
-                    <>Mascots appear only on bookings for users assigned by an administrator; departments receive no automatic mascot.</>
+                    <>The monthly top five verified bookers automatically receive a rank mascot: King Cat, Bunny, Pig, Penguin, then Panda. An administrator can assign a different mascot at any time.</>
                   )}
                 </div>
               </div>
@@ -504,6 +512,7 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
                 <tbody className="divide-y divide-slate-100 text-xs">
                   {topTwentyUsers.map((user) => {
                     const honor = getLeaderboardHonorInfo(user.rank, language);
+                    const mascot = period === 'current_month' ? getUserMascot(user.email) : null;
                     const maxMinutes = topTwentyUsers[0]?.totalMinutes || 1;
                     const barPercent = Math.max(5, Math.round((user.totalMinutes / maxMinutes) * 100));
 
@@ -529,6 +538,12 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
                                   <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-black tracking-tight ${honor.badgeClass}`}>
                                     <span>{honor.icon}</span>
                                     <span>{honor.shortTitle}</span>
+                                  </span>
+                                )}
+                                {mascot && (
+                                  <span title={`Mascot: ${mascot.label}`} className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[9px] font-black text-violet-800">
+                                    <MascotIcon mascotId={mascot.id} size={16} />
+                                    <span>{mascot.label}</span>
                                   </span>
                                 )}
                               </div>

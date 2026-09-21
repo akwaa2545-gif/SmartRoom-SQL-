@@ -475,12 +475,7 @@ const SmartRoomApplication: React.FC = () => {
       email: normalizedEmail,
       mascotId,
     });
-    setMascotAssignments((current) => {
-      const next = { ...current };
-      if (mascotId) next[normalizedEmail] = mascotId;
-      else delete next[normalizedEmail];
-      return next;
-    });
+    setMascotAssignments(await getPortableMascotAssignments());
   };
 
   const getClosureCleanupKey = (room: Room) =>
@@ -2494,6 +2489,7 @@ const SmartRoomApplication: React.FC = () => {
             language={language}
             bookings={bookings}
             rooms={rooms}
+            mascotAssignments={mascotAssignments}
             onNavigateBack={() => navigateToView("dashboard")}
           />
         )}
