@@ -55,6 +55,13 @@ const MASCOT_IDS = new Set([
   "king-cat", "penguin", "bunny", "pig", "fox", "panda",
   "shiba", "hamster", "otter", "unicorn", "minion",
 ]);
+const ANNOUNCEMENT_TARGET_PAGES = new Set([
+  "all", "dashboard", "status", "timeline", "grid",
+]);
+const ANNOUNCEMENT_AUDIENCES = new Set(["all", "guests", "logged_in"]);
+const ANNOUNCEMENT_CATEGORIES = new Set([
+  "info", "alert", "warning", "success", "maintenance", "event",
+]);
 
 function json(response, status, body) {
   response.writeHead(status, {
@@ -2841,6 +2848,229 @@ async function saveMascotAssignment(input, username) {
   return { email, mascotId, deleted: false };
 }
 
+function parseAnnouncementTargetPages(value) {
+  let pages = value;
+  if (typeof value === "string") {
+    try {
+      pages = JSON.parse(value);
+    } catch {
+      pages = [];
+    }
+  }
+  if (!Array.isArray(pages)) return ["all"];
+  const validPages = [...new Set(pages
+    .map((page) => String(page || "").trim().toLowerCase())
+    .filter((page) => ANNOUNCEMENT_TARGET_PAGES.has(page)))];
+  return validPages.includes("all") ? ["all"] : validPages.length ? validPages : ["all"];
+}
+
+function sqlAnnouncementFromRecord(record) {
+  return {
+    id: String(record.Id),
+    title: record.Title || "",
+    message: record.Message || "",
+    category: ANNOUNCEMENT_CATEGORIES.has(record.Category) ? record.Category : "info",
+    imageUrl: record.ImageUrl || "",
+    buttonText: record.ButtonText || "",
+    buttonUrl: record.ButtonUrl || "",
+    startAt: toIsoDate(record.StartAt),
+    endAt: toIsoDate(record.EndAt),
+    isActive: Boolean(record.IsActive),
+    showOnce: Boolean(record.ShowOnce),
+    targetPages: parseAnnouncementTargetPages(record.TargetPages),
+    audience: ANNOUNCEMENT_AUDIENCES.has(record.Audience) ? record.Audience : "all",
+    priority: Number.isInteger(record.Priority) ? record.Priority : Number(record.Priority || 0),
+    createdAt: toIsoDate(record.CreatedAt),
+    updatedAt: toIsoDate(record.UpdatedAt),
+    publishedAt: toIsoDate(record.PublishedAt),
+    disabledAt: toIsoDate(record.DisabledAt),
+  };
+}
+
+function parseAnnouncementTime(value, name) {
+  if (typeof value !== "string" || value.length > 64)
+    throw new ApiError(400, `invalid-${name}`, `${name} must be a valid ISO date-time.`);
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime()))
+    throw new ApiError(400, `invalid-${name}`, `${name} must be a valid ISO date-time.`);
+  return date;
+}
+
+function validateAnnouncementUrl(value, name, maxLength, allowRelative = false) {
+  const text = optionalText(value, name, maxLength);
+  if (!text) return "";
+  if (allowRelative && /^\/[A-Za-z0-9._~:/?#[\]@!$&'()*+,;=%-]*$/.test(text) && !text.startsWith("//"))
+    return text;
+  let url;
+  try {
+    url = new URL(text);
+  } catch {
+    throw new ApiError(400, `invalid-${name}`, `${name} must be a valid HTTPS URL.`);
+  }
+  if (url.protocol !== "https:")
+    throw new ApiError(400, `invalid-${name}`, `${name} must use HTTPS.`);
+  return url.toString();
+}
+
+function normalizeAnnouncementInput(input) {
+  const id = input.id ? requiredText(input.id, "announcement-id", 128) : crypto.randomUUID();
+  const title = requiredText(input.title, "announcement-title", 160);
+  const message = requiredText(input.message, "announcement-message", 2000);
+  const category = optionalText(input.category || "info", "announcement-category", 40).toLowerCase();
+  if (!ANNOUNCEMENT_CATEGORIES.has(category))
+    throw new ApiError(400, "invalid-announcement-category", "Select a valid announcement category.");
+
+  const rawPages = Array.isArray(input.targetPages) ? input.targetPages : [];
+  const targetPages = [...new Set(rawPages
+    .map((page) => String(page || "").trim().toLowerCase())
+    .filter((page) => ANNOUNCEMENT_TARGET_PAGES.has(page)))];
+  if (targetPages.length === 0)
+    throw new ApiError(400, "invalid-announcement-pages", "Select at least one valid announcement page.");
+  const normalizedPages = targetPages.includes("all") ? ["all"] : targetPages;
+
+  const audience = optionalText(input.audience || "all", "announcement-audience", 30).toLowerCase();
+  if (!ANNOUNCEMENT_AUDIENCES.has(audience))
+    throw new ApiError(400, "invalid-announcement-audience", "Select a valid announcement audience.");
+
+  const startAt = parseAnnouncementTime(input.startAt, "announcement-start");
+  const endAt = parseAnnouncementTime(input.endAt, "announcement-end");
+  if (endAt <= startAt)
+    throw new ApiError(400, "invalid-announcement-dates", "Announcement end time must be after its start time.");
+
+  const buttonText = optionalText(input.buttonText, "announcement-button-text", 80);
+  const buttonUrl = validateAnnouncementUrl(input.buttonUrl, "announcement-button-url", 2048, true);
+  if (Boolean(buttonText) !== Boolean(buttonUrl))
+    throw new ApiError(400, "invalid-announcement-button", "Button text and URL must both be provided, or both left blank.");
+
+  const priority = Number(input.priority ?? 0);
+  if (!Number.isInteger(priority) || priority < 0 || priority > 9999)
+    throw new ApiError(400, "invalid-announcement-priority", "Announcement priority must be an integer from 0 to 9999.");
+
+  return {
+    id,
+    title,
+    message,
+    category,
+    imageUrl: validateAnnouncementUrl(input.imageUrl, "announcement-image-url", 2048, true),
+    buttonText,
+    buttonUrl,
+    startAt,
+    endAt,
+    isActive: input.isActive === true,
+    showOnce: input.showOnce === true,
+    targetPages: normalizedPages,
+    audience,
+    priority,
+  };
+}
+
+async function listSqlAnnouncements() {
+  const connection = await pool.connect();
+  const result = await connection.request().query(`SELECT TOP (200) Id, Title, Message, Category, ImageUrl, ButtonText, ButtonUrl,
+      StartAt, EndAt, IsActive, ShowOnce, TargetPages, Audience, Priority,
+      CreatedAt, UpdatedAt, PublishedAt, DisabledAt
+    FROM dbo.Announcements
+    ORDER BY UpdatedAt DESC, Id ASC;`);
+  return result.recordset.map(sqlAnnouncementFromRecord);
+}
+
+async function saveSqlAnnouncement(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input))
+    throw new ApiError(400, "invalid-announcement", "Announcement details are invalid.");
+  const announcement = normalizeAnnouncementInput(input);
+  const connection = await pool.connect();
+  const existingResult = await connection.request()
+    .input("id", sql.NVarChar(128), announcement.id)
+    .query("SELECT TOP 1 IsActive, CreatedAt, PublishedAt, DisabledAt FROM dbo.Announcements WHERE Id = @id;");
+  const existing = existingResult.recordset[0] || null;
+  const now = new Date();
+  const createdAt = existing?.CreatedAt || now;
+  const publishedAt = announcement.isActive && !existing?.IsActive
+    ? now
+    : existing?.PublishedAt || null;
+  const disabledAt = !announcement.isActive && existing?.IsActive
+    ? now
+    : existing?.DisabledAt || null;
+
+  await connection.request()
+    .input("id", sql.NVarChar(128), announcement.id)
+    .input("title", sql.NVarChar(200), announcement.title)
+    .input("message", sql.NVarChar(sql.MAX), announcement.message)
+    .input("category", sql.NVarChar(40), announcement.category)
+    .input("imageUrl", sql.NVarChar(sql.MAX), announcement.imageUrl)
+    .input("buttonText", sql.NVarChar(100), announcement.buttonText)
+    .input("buttonUrl", sql.NVarChar(2048), announcement.buttonUrl)
+    .input("startAt", sql.DateTime2, announcement.startAt)
+    .input("endAt", sql.DateTime2, announcement.endAt)
+    .input("isActive", sql.Bit, announcement.isActive)
+    .input("showOnce", sql.Bit, announcement.showOnce)
+    .input("targetPages", sql.NVarChar(sql.MAX), JSON.stringify(announcement.targetPages))
+    .input("audience", sql.NVarChar(30), announcement.audience)
+    .input("priority", sql.Int, announcement.priority)
+    .input("createdAt", sql.DateTime2, createdAt)
+    .input("updatedAt", sql.DateTime2, now)
+    .input("publishedAt", sql.DateTime2, publishedAt)
+    .input("disabledAt", sql.DateTime2, disabledAt)
+    .query(`MERGE dbo.Announcements WITH (HOLDLOCK) AS target
+      USING (SELECT @id AS Id) AS source ON target.Id = source.Id
+      WHEN MATCHED THEN UPDATE SET Title = @title, Message = @message,
+        Category = @category, ImageUrl = @imageUrl, ButtonText = @buttonText,
+        ButtonUrl = @buttonUrl, StartAt = @startAt, EndAt = @endAt,
+        IsActive = @isActive, ShowOnce = @showOnce, TargetPages = @targetPages,
+        Audience = @audience, Priority = @priority, UpdatedAt = @updatedAt,
+        PublishedAt = @publishedAt, DisabledAt = @disabledAt
+      WHEN NOT MATCHED THEN INSERT (Id, Title, Message, Category, ImageUrl,
+        ButtonText, ButtonUrl, StartAt, EndAt, IsActive, ShowOnce, TargetPages,
+        Audience, Priority, CreatedAt, UpdatedAt, PublishedAt, DisabledAt)
+      VALUES (@id, @title, @message, @category, @imageUrl, @buttonText,
+        @buttonUrl, @startAt, @endAt, @isActive, @showOnce, @targetPages,
+        @audience, @priority, @createdAt, @updatedAt, @publishedAt, @disabledAt);`);
+
+  const savedResult = await connection.request()
+    .input("id", sql.NVarChar(128), announcement.id)
+    .query(`SELECT TOP 1 Id, Title, Message, Category, ImageUrl, ButtonText, ButtonUrl,
+        StartAt, EndAt, IsActive, ShowOnce, TargetPages, Audience, Priority,
+        CreatedAt, UpdatedAt, PublishedAt, DisabledAt
+      FROM dbo.Announcements WHERE Id = @id;`);
+  return sqlAnnouncementFromRecord(savedResult.recordset[0]);
+}
+
+async function deleteSqlAnnouncement(idValue) {
+  const id = requiredText(idValue, "announcement-id", 128);
+  const connection = await pool.connect();
+  const result = await connection.request()
+    .input("id", sql.NVarChar(128), id)
+    .query("DELETE FROM dbo.Announcements WHERE Id = @id;");
+  if (!result.rowsAffected?.[0])
+    throw new ApiError(404, "announcement-not-found", "Announcement was not found.");
+  return { id, deleted: true };
+}
+
+async function getActiveSqlAnnouncement(pageValue, audienceValue) {
+  const page = String(pageValue || "dashboard").trim().toLowerCase();
+  const audience = String(audienceValue || "guests").trim().toLowerCase();
+  if (!ANNOUNCEMENT_TARGET_PAGES.has(page))
+    throw new ApiError(400, "invalid-announcement-page", "This announcement page is not supported.");
+  if (!ANNOUNCEMENT_AUDIENCES.has(audience) || audience === "all")
+    throw new ApiError(400, "invalid-announcement-audience", "Announcement audience must be guests or logged_in.");
+
+  const connection = await pool.connect();
+  const result = await connection.request()
+    .input("now", sql.DateTime2, new Date())
+    .input("audience", sql.NVarChar(30), audience)
+    .query(`SELECT TOP (200) Id, Title, Message, Category, ImageUrl, ButtonText, ButtonUrl,
+        StartAt, EndAt, IsActive, ShowOnce, TargetPages, Audience, Priority,
+        CreatedAt, UpdatedAt, PublishedAt, DisabledAt
+      FROM dbo.Announcements
+      WHERE IsActive = 1 AND StartAt <= @now AND EndAt >= @now
+        AND Audience IN (N'all', @audience)
+      ORDER BY Priority DESC, UpdatedAt DESC, Id ASC;`);
+  const match = result.recordset
+    .map(sqlAnnouncementFromRecord)
+    .find((announcement) => announcement.targetPages.includes("all") || announcement.targetPages.includes(page));
+  return { announcement: match || null };
+}
+
 async function runAdminTool(session, input) {
   const tool = typeof input.tool === "string" ? input.tool : "";
   const payload =
@@ -2895,6 +3125,12 @@ async function runAdminTool(session, input) {
     requireSuperAdmin();
     return saveMascotAssignment(payload, session.username);
   }
+  if (tool === "list_announcements")
+    return { announcements: await listSqlAnnouncements() };
+  if (tool === "save_announcement")
+    return { announcement: await saveSqlAnnouncement(payload.announcement) };
+  if (tool === "delete_announcement")
+    return deleteSqlAnnouncement(payload.id || payload.announcementId);
   throw new ApiError(
     400,
     "unsupported-admin-tool",
@@ -3378,6 +3614,18 @@ const requestHandler = async (request, response) => {
       return json(response, 200, {
         success: true,
         data: { rooms: await listSqlRooms() },
+      });
+    }
+    if (
+      request.method === "GET" &&
+      url.pathname === "/api/announcements/active"
+    ) {
+      return json(response, 200, {
+        success: true,
+        data: await getActiveSqlAnnouncement(
+          url.searchParams.get("page"),
+          url.searchParams.get("audience"),
+        ),
       });
     }
     if (request.method === "GET" && url.pathname === "/api/bookings") {

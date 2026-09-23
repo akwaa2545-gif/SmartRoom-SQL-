@@ -3,6 +3,7 @@ import { AlertCircle, AlertTriangle, Bell, CheckCircle2, Info, Wrench, X } from 
 import { httpsCallable } from 'firebase/functions';
 import { Announcement, AnnouncementCategory } from '../types';
 import { functions } from '../firebase';
+import { getPortableActiveAnnouncement, isPortableMailApiEnabled } from '../utils/portableMailApi';
 
 interface AnnouncementModalProps {
   page: string;
@@ -111,10 +112,17 @@ const AnnouncementModal: React.FC<AnnouncementModalProps> = ({ page, audience, l
 
     const loadAnnouncement = async () => {
       try {
-        const getActiveAnnouncement = httpsCallable(functions, 'getActiveAnnouncement');
-        const response = await getActiveAnnouncement({ page, audience });
-        const data = response.data as { announcement?: unknown };
-        const nextAnnouncement = normalizeAnnouncementRecord(data.announcement);
+        let rawAnnouncement: unknown;
+        if (isPortableMailApiEnabled()) {
+          const data = await getPortableActiveAnnouncement(page, audience);
+          rawAnnouncement = data.announcement;
+        } else {
+          const getActiveAnnouncement = httpsCallable(functions, 'getActiveAnnouncement');
+          const response = await getActiveAnnouncement({ page, audience });
+          const data = response.data as { announcement?: unknown };
+          rawAnnouncement = data.announcement;
+        }
+        const nextAnnouncement = normalizeAnnouncementRecord(rawAnnouncement);
 
         if (cancelled || !nextAnnouncement) {
           if (!cancelled) {

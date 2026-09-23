@@ -149,6 +149,27 @@ export interface PortableCancellationContext {
   status: PortableBooking['status'];
 }
 
+export interface PortableAnnouncement {
+  id: string;
+  title: string;
+  message: string;
+  category: 'info' | 'alert' | 'warning' | 'success' | 'maintenance' | 'event';
+  imageUrl: string;
+  buttonText: string;
+  buttonUrl: string;
+  startAt: string | null;
+  endAt: string | null;
+  isActive: boolean;
+  showOnce: boolean;
+  targetPages: string[];
+  audience: 'all' | 'guests' | 'logged_in';
+  priority: number;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  publishedAt?: string | null;
+  disabledAt?: string | null;
+}
+
 export interface PortableAdminSession {
   id: string;
   username: string;
@@ -205,6 +226,18 @@ export const isPortableMailApiEnabled = () => Boolean(apiBaseUrl);
 
 export const getPortableRooms = () => request<{ rooms: PortableRoom[] }>('/api/rooms');
 export const getPortableBookings = () => request<{ bookings: PortableBooking[] }>('/api/bookings');
+export const getPortableActiveAnnouncement = async (page: string, audience: 'guests' | 'logged_in') => {
+  const response = await fetch(`${apiBaseUrl}/api/announcements/active?page=${encodeURIComponent(page)}&audience=${encodeURIComponent(audience)}`, {
+    headers: { accept: 'application/json' },
+  });
+  const result = await response.json().catch(() => ({})) as {
+    success?: boolean;
+    data?: { announcement?: PortableAnnouncement | null };
+    error?: { message?: string };
+  };
+  if (!response.ok || !result.success) throw new Error(result.error?.message || 'Announcement request failed.');
+  return result.data || { announcement: null };
+};
 export const getPortableCancellationContext = (bookingId: string, token: string) => request<PortableCancellationContext>(`/api/bookings/${encodeURIComponent(bookingId)}/cancellation-context?token=${encodeURIComponent(token)}`);
 export const cancelPortableBooking = (bookingId: string, token?: string) => request<{
   bookingId: string;

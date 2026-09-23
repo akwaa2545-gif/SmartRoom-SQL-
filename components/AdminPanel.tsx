@@ -1695,18 +1695,23 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const loadAnnouncements = async () => {
     const adminPayload = getCurrentAdminAuthPayload();
-    if (!adminPayload) return;
+    if (!isPortableMailApiEnabled() && !adminPayload) return;
 
     setIsAnnouncementLoading(true);
     try {
-      if (!isPortableMailApiEnabled() && !auth.currentUser) {
-        await signInAnonymously(auth);
+      let announcementRecords: unknown[] = [];
+      if (isPortableMailApiEnabled()) {
+        const data = await runPortableAdminTool<{ announcements?: unknown[] }>('list_announcements', {});
+        announcementRecords = data.announcements || [];
+      } else {
+        if (!auth.currentUser) await signInAnonymously(auth);
+        const listAnnouncements = httpsCallable(functions, 'listAnnouncements');
+        const response = await listAnnouncements({ admin: adminPayload });
+        const data = response.data as { announcements?: unknown[] };
+        announcementRecords = data.announcements || [];
       }
-      const listAnnouncements = httpsCallable(functions, 'listAnnouncements');
-      const response = await listAnnouncements({ admin: adminPayload });
-      const data = response.data as { announcements?: unknown[] };
-      const nextAnnouncements = Array.isArray(data.announcements)
-        ? data.announcements.map(normalizeAnnouncementRecord)
+      const nextAnnouncements = Array.isArray(announcementRecords)
+        ? announcementRecords.map(normalizeAnnouncementRecord)
         : [];
       nextAnnouncements.sort((a, b) => {
         if (b.priority !== a.priority) return b.priority - a.priority;
@@ -1928,7 +1933,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const saveAnnouncementForm = async (nextForm: AnnouncementFormState = announcementForm) => {
     const adminPayload = getCurrentAdminAuthPayload();
-    if (!adminPayload) return false;
+    if (!isPortableMailApiEnabled() && !adminPayload) return false;
 
     const errors = validateAnnouncementForm(nextForm);
     setAnnouncementFormErrors(errors);
@@ -1939,12 +1944,19 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
     setIsSavingAnnouncement(true);
     try {
-      const saveAnnouncement = httpsCallable(functions, 'saveAnnouncement');
-      const response = await saveAnnouncement({
-        admin: adminPayload,
-        announcement: buildAnnouncementPayload(nextForm),
-      });
-      const data = response.data as { announcement?: unknown };
+      let data: { announcement?: unknown };
+      if (isPortableMailApiEnabled()) {
+        data = await runPortableAdminTool<{ announcement?: unknown }>('save_announcement', {
+          announcement: buildAnnouncementPayload(nextForm),
+        });
+      } else {
+        const saveAnnouncement = httpsCallable(functions, 'saveAnnouncement');
+        const response = await saveAnnouncement({
+          admin: adminPayload,
+          announcement: buildAnnouncementPayload(nextForm),
+        });
+        data = response.data as { announcement?: unknown };
+      }
       const saved = normalizeAnnouncementRecord(data.announcement);
       setAnnouncementForm(announcementToForm(saved));
       setAnnouncementFormErrors({});
@@ -1974,7 +1986,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const handleDeleteAnnouncement = (announcement: Announcement) => {
     const adminPayload = getCurrentAdminAuthPayload();
-    if (!adminPayload) return;
+    if (!isPortableMailApiEnabled() && !adminPayload) return;
 
     setConfirmModal({
       isOpen: true,
@@ -1985,8 +1997,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       cancelText: 'Cancel',
       onConfirm: async () => {
         try {
-          const deleteAnnouncement = httpsCallable(functions, 'deleteAnnouncement');
-          await deleteAnnouncement({ admin: adminPayload, id: announcement.id });
+          if (isPortableMailApiEnabled()) {
+            await runPortableAdminTool('delete_announcement', { id: announcement.id });
+          } else {
+            const deleteAnnouncement = httpsCallable(functions, 'deleteAnnouncement');
+            await deleteAnnouncement({ admin: adminPayload, id: announcement.id });
+          }
           showNotification('Announcement deleted.', 'success');
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
           if (announcementForm.id === announcement.id) {
