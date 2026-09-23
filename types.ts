@@ -67,6 +67,7 @@ export interface Booking {
   startTime: Date; // JavaScript Date object
   endTime: Date;   // JavaScript Date object
   status: BookingStatus;
+  canCancel?: boolean;
   deskNumber?: string;
   createdAt?: any;
   actualStartTime?: Date;

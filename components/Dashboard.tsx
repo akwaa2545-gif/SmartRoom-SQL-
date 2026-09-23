@@ -44,6 +44,7 @@ interface DashboardProps {
   maintenanceHistory?: RoomMaintenanceRecord[];
   language: 'th' | 'en';
   onDeleteBooking?: (id: string) => void;
+  onCancelBooking?: (booking: Booking) => void;
   onConfirmBooking?: (bookingData: any) => Promise<boolean>;
   onUpdateBooking?: (id: string, updatedFields: Partial<Booking>) => Promise<boolean>;
   selectedRoomId: string;
@@ -72,6 +73,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   maintenanceHistory = [],
   language,
   onDeleteBooking,
+  onCancelBooking,
   onConfirmBooking,
   onUpdateBooking,
   selectedRoomId,
@@ -1843,7 +1845,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                   ) : singleRoomBookings.length > 0 ? (
                     <div className="p-3 bg-amber-50 border border-amber-200 text-amber-700 text-center rounded-xl text-xs font-bold leading-relaxed flex items-center justify-center space-x-2">
                       <ShieldAlert className="w-4 h-4 text-amber-500 flex-shrink-0" />
-                      <span>{language === 'th' ? 'หากต้องการยกเลิกการจอง กรุณาติดต่อผู้ดูแลระบบ (Admin)' : 'To cancel bookings, please contact an administrator.'}</span>
+                      <span>{language === 'th' ? 'กดปุ่มยกเลิกในการจองด้านล่างเพื่อคืนเวลาห้อง' : 'Use the Cancel button in the booking list below.'}</span>
                     </div>
                   ) : (
                     <div className="p-3 bg-slate-50 border border-slate-200 text-slate-500 text-center rounded-xl text-xs font-bold leading-relaxed">
@@ -1923,6 +1925,26 @@ const Dashboard: React.FC<DashboardProps> = ({
                               </div>
                             </div>
                           </div>
+                          {onCancelBooking &&
+                            b.canCancel &&
+                            [BookingStatus.PENDING, BookingStatus.CONFIRMED, BookingStatus.VERIFIED].includes(b.status) &&
+                            b.endTime.getTime() > liveTime.getTime() && (
+                              <div className="flex justify-end pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => onCancelBooking(b)}
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 transition-colors hover:border-rose-300 hover:bg-rose-100"
+                                  aria-label={liveTime >= b.startTime
+                                    ? (language === 'th' ? 'ยุติการจองและคืนเวลาที่เหลือ' : 'End booking early and release remaining time')
+                                    : (language === 'th' ? 'ยกเลิกการจอง' : 'Cancel booking')}
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                  {liveTime >= b.startTime
+                                    ? (language === 'th' ? 'คืนเวลาที่เหลือ' : 'End early')
+                                    : (language === 'th' ? 'ยกเลิกการจอง' : 'Cancel booking')}
+                                </button>
+                              </div>
+                            )}
                         </div>
                       </div>
                     );

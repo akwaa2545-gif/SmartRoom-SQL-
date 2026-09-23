@@ -661,6 +661,7 @@ function sqlBookingAvailabilityForClient(record) {
     ),
     verificationWindowOpenedAt: toIsoDate(record.VerificationWindowOpenedAt),
     verificationWindowClosedAt: toIsoDate(record.VerificationWindowClosedAt),
+    canCancel: Boolean(record.CanCancel),
   };
 }
 
@@ -698,11 +699,12 @@ async function listSqlRooms() {
   return [...rooms.values()];
 }
 
-async function listSqlBookings(from, end) {
+async function listSqlBookings(from, end, requesterUid) {
   const connection = await pool.connect();
-  const query = `SELECT Id, RoomId, Title, Organizer, Department, EmployeeId, DeskNumber, Email, EmailDisplayName, EmailJobTitle, EmailDepartment, CreatedAt, StartTime, EndTime, Status, ActualStartTime, ActualEndTime, VerifiedAt,
+  const query = `SELECT Id, RoomId, Title, Organizer, Department, EmployeeId, DeskNumber, Email, EmailDisplayName, EmailJobTitle, EmailDepartment, CreatedByUid, CreatedAt, StartTime, EndTime, Status, ActualStartTime, ActualEndTime, VerifiedAt,
       VerificationEmailStatus, VerificationEmailScheduledAt,
-      VerificationWindowOpenedAt, VerificationWindowClosedAt
+      VerificationWindowOpenedAt, VerificationWindowClosedAt,
+      CASE WHEN CreatedByUid = @requesterUid THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END AS CanCancel
     FROM dbo.Bookings
     WHERE (@from IS NULL OR EndTime >= @from)
       AND (@end IS NULL OR StartTime <= @end)
@@ -711,6 +713,7 @@ async function listSqlBookings(from, end) {
     .request()
     .input("from", sql.DateTime2, from)
     .input("end", sql.DateTime2, end)
+    .input("requesterUid", sql.NVarChar(128), requesterUid)
     .query(query);
   const activeBookings = result.recordset.map(sqlBookingAvailabilityForClient);
   const historyResult = await connection
@@ -1032,8 +1035,67 @@ function buildBookingNotificationFields(bookingId, booking, appUrl) {
     bookingDate,
     timeRange,
     appUrl: String(appUrl),
+    cancelUrl: !isTemplatePreview && bookingId && booking.endTime
+      ? buildBookingCancellationUrl(bookingId, booking.endTime, appUrl)
+      : "",
     logoUrl: new URL("/favicon.png", config.appBaseUrl).toString(),
   };
+}
+
+function createBookingCancellationToken(bookingId, expiresAt) {
+  const expiration = toDate(expiresAt);
+  if (!bookingId || !expiration) return "";
+  const payload = Buffer.from(
+    `${bookingId}.${Math.floor(expiration.getTime() / 1000)}`,
+    "utf8",
+  ).toString("base64url");
+  const signature = crypto
+    .createHmac("sha256", serviceAccount.private_key)
+    .update(payload)
+    .digest("base64url");
+  return `${payload}.${signature}`;
+}
+
+function verifyBookingCancellationToken(token, bookingId, bookingEndTime) {
+  if (typeof token !== "string" || token.length > 512) return false;
+  const [payload, signature, extra] = token.split(".");
+  if (!payload || !signature || extra !== undefined) return false;
+  const expectedSignature = crypto
+    .createHmac("sha256", serviceAccount.private_key)
+    .update(payload)
+    .digest();
+  let suppliedSignature;
+  try {
+    suppliedSignature = Buffer.from(signature, "base64url");
+  } catch {
+    return false;
+  }
+  if (
+    suppliedSignature.length !== expectedSignature.length ||
+    !crypto.timingSafeEqual(suppliedSignature, expectedSignature)
+  ) return false;
+
+  let decoded;
+  try {
+    decoded = Buffer.from(payload, "base64url").toString("utf8");
+  } catch {
+    return false;
+  }
+  const match = decoded.match(/^([A-Za-z0-9_-]{1,128})\.(\d{10})$/);
+  if (!match || match[1] !== bookingId) return false;
+  const tokenExpiration = Number(match[2]) * 1000;
+  const bookingExpiration = toDate(bookingEndTime)?.getTime() || 0;
+  return tokenExpiration > Date.now() && tokenExpiration <= bookingExpiration + 1000;
+}
+
+function buildBookingCancellationUrl(bookingId, expiresAt, appUrl) {
+  const cancellationUrl = new URL(appUrl);
+  cancellationUrl.searchParams.set("cancelBooking", String(bookingId));
+  cancellationUrl.searchParams.set(
+    "cancelToken",
+    createBookingCancellationToken(bookingId, expiresAt),
+  );
+  return cancellationUrl.toString();
 }
 
 function buildTeamsAdaptiveCard(bookingId, booking, appUrl) {
@@ -1233,6 +1295,13 @@ function buildTeamsAdaptiveCard(bookingId, booking, appUrl) {
             title: "Open TOKIN Smart Room",
             url: fields.appUrl,
           },
+          ...(fields.cancelUrl
+            ? [{
+                type: "Action.OpenUrl",
+                title: "Cancel booking",
+                url: fields.cancelUrl,
+              }]
+            : []),
         ],
       },
       {
@@ -1248,7 +1317,9 @@ function buildTeamsAdaptiveCard(bookingId, booking, appUrl) {
           },
           {
             type: "TextBlock",
-            text: "No action is required. Simply arrive at the room on time.",
+            text: fields.cancelUrl
+              ? "Plans changed? Use Cancel booking to release the room time."
+              : "No action is required. Simply arrive at the room on time.",
             wrap: true,
             size: "Small",
             isSubtle: true,
@@ -1280,7 +1351,21 @@ function buildTeamsAdaptiveCard(bookingId, booking, appUrl) {
   });
 }
 
-function buildBookingFlowPayload({ email, bookingId, booking, subject, message }) {
+function buildBookingFlowPayload({
+  email,
+  bookingId,
+  booking,
+  subject,
+  message,
+  notificationType = "booking_reminder",
+  teams,
+  teamsCard,
+}) {
+  const notificationFields = buildBookingNotificationFields(
+    bookingId,
+    booking,
+    config.appBaseUrl,
+  );
   return {
     to: email,
     email,
@@ -1298,8 +1383,9 @@ function buildBookingFlowPayload({ email, bookingId, booking, subject, message }
     Html: message,
     Message: message,
     senderName: "TOKIN Smart Room",
-    teams: buildBookingNotificationFields(bookingId, booking, config.appBaseUrl),
-    teamsCard: buildTeamsAdaptiveCard(bookingId, booking, config.appBaseUrl),
+    notificationType,
+    teams: teams || notificationFields,
+    teamsCard: teamsCard || buildTeamsAdaptiveCard(bookingId, booking, config.appBaseUrl),
   };
 }
 
@@ -1314,6 +1400,7 @@ function buildReminderMessage(bookingId, booking, appUrl) {
   const bookingDate = fields.bookingDate;
   const timeRange = fields.timeRange;
   const safeAppUrl = escapeHtml(fields.appUrl);
+  const safeCancelUrl = escapeHtml(fields.cancelUrl);
   const logoUrl = escapeHtml(fields.logoUrl);
 
   return `<!doctype html>
@@ -1364,13 +1451,119 @@ function buildReminderMessage(bookingId, booking, appUrl) {
             <tr><td style="padding:13px 16px;font-size:13px;line-height:21px;"><span style="display:inline-block;width:92px;color:#64748b;">Booked by</span><strong style="color:#0f172a;">${organizer}</strong><br><span style="display:inline-block;width:92px;color:#64748b;">Department</span><strong style="color:#0f172a;">${department}</strong><br><span style="display:inline-block;width:92px;color:#64748b;">Booking ID</span><span style="font-family:monospace;font-size:12px;color:#475569;">${displayBookingId}</span></td></tr>
           </table>
         </td></tr>
-        <tr><td align="center" style="padding:24px 28px 28px;"><table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr><td style="background:#e5673e;border-radius:10px;"><a href="${safeAppUrl}" target="_blank" style="display:inline-block;padding:13px 24px;border-radius:10px;font-size:14px;font-weight:800;color:#ffffff;text-decoration:none;">Open TOKIN Smart Room</a></td></tr></table><p style="margin:14px 0 0;font-size:12px;line-height:18px;color:#64748b;">No action is required. Please arrive at the room on time.</p></td></tr>
+        <tr><td align="center" style="padding:24px 28px 28px;"><table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr><td style="background:#e5673e;border-radius:10px;"><a href="${safeAppUrl}" target="_blank" style="display:inline-block;padding:13px 24px;border-radius:10px;font-size:14px;font-weight:800;color:#ffffff;text-decoration:none;">Open TOKIN Smart Room</a></td></tr></table>${fields.cancelUrl ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:12px;"><tr><td style="border:1px solid #fecaca;border-radius:10px;"><a href="${safeCancelUrl}" target="_blank" style="display:inline-block;padding:11px 20px;border-radius:10px;font-size:13px;font-weight:800;color:#b91c1c;text-decoration:none;">Cancel booking</a></td></tr></table>` : ""}<p style="margin:14px 0 0;font-size:12px;line-height:18px;color:#64748b;">Use Cancel booking if your plans change. Please arrive at the room on time.</p></td></tr>
         <tr><td style="padding:18px 28px;background:#0f172a;"><div style="font-size:12px;font-weight:700;color:#ffffff;">TOKIN Smart Room</div><div style="margin-top:4px;font-size:11px;color:#94a3b8;">Automated booking notification · Please do not reply to this email.</div></td></tr>
       </table>
     </td></tr>
   </table>
 </body>
 </html>`;
+}
+
+function formatNotificationTime(value) {
+  const date = toDate(value);
+  return date
+    ? date.toLocaleTimeString("en-GB", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+        timeZone: "Asia/Bangkok",
+      })
+    : "-";
+}
+
+function buildCancellationMessage(bookingId, booking, cancellation) {
+  const fields = buildBookingNotificationFields(bookingId, booking, config.appBaseUrl);
+  const isEarlyRelease = cancellation.action === "ended-early";
+  const heading = isEarlyRelease ? "Room time released" : "Booking cancelled";
+  const description = isEarlyRelease
+    ? "The booking has ended early. The room is available for the remaining time."
+    : "The booking has been cancelled and the reserved room time has been released.";
+  const originalTimeRange = `${formatNotificationTime(booking.startTime)} – ${formatNotificationTime(cancellation.originalEndTime)}`;
+  const updatedTimeRange = fields.timeRange;
+
+  return `<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>TOKIN Smart Room booking update</title></head>
+<body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;color:#0f172a;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background:#f8fafc;padding:32px 12px;"><tr><td align="center">
+    <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;background:#fff;border:1px solid #e2e8f0;border-radius:20px;overflow:hidden;">
+      <tr><td style="padding:22px 28px;border-bottom:4px solid #e5673e;"><table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr><td style="padding-right:10px;"><img src="${escapeHtml(fields.logoUrl)}" width="32" height="32" alt="TOKIN Smart Room" style="display:block;border:0;"></td><td><div style="font-size:18px;line-height:20px;font-weight:800;color:#e5673e;">TOKIN</div><div style="margin-top:2px;font-size:11px;color:#64748b;">Smart Room</div></td></tr></table></td></tr>
+      <tr><td style="padding:30px 28px 12px;"><div style="font-size:12px;font-weight:800;letter-spacing:.8px;color:#e5673e;text-transform:uppercase;">Booking update</div><h1 style="margin:8px 0 0;font-size:25px;line-height:32px;font-weight:800;color:#0f172a;">${heading}</h1><p style="margin:10px 0 0;font-size:14px;line-height:22px;color:#64748b;">${description}</p></td></tr>
+      <tr><td style="padding:16px 28px 8px;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border:1px solid #fed7aa;border-radius:14px;background:#fffaf7;"><tr><td style="padding:20px;"><div style="font-size:11px;font-weight:800;letter-spacing:.8px;color:#c2410c;text-transform:uppercase;">${escapeHtml(fields.roomName)}</div><div style="margin-top:6px;font-size:19px;line-height:26px;font-weight:800;color:#0f172a;">${escapeHtml(fields.title)}</div><div style="margin-top:10px;font-size:13px;color:#64748b;">${escapeHtml(fields.bookingDate)}</div><div style="margin-top:12px;font-size:13px;color:#64748b;">Original time: <strong style="color:#475569;">${escapeHtml(originalTimeRange)}</strong></div><div style="margin-top:5px;font-size:13px;color:#64748b;">${isEarlyRelease ? "Updated time" : "Released time"}: <strong style="color:#c2410c;">${escapeHtml(updatedTimeRange)}</strong></div><div style="margin-top:12px;font-size:12px;color:#64748b;">Booked by ${escapeHtml(fields.organizer)} · ${escapeHtml(fields.department)}</div><div style="margin-top:4px;font-size:11px;color:#94a3b8;">Booking ID: ${escapeHtml(fields.bookingId)}</div></td></tr></table></td></tr>
+      <tr><td align="center" style="padding:24px 28px 28px;"><table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr><td style="background:#e5673e;border-radius:10px;"><a href="${escapeHtml(fields.appUrl)}" target="_blank" style="display:inline-block;padding:13px 24px;border-radius:10px;font-size:14px;font-weight:800;color:#fff;text-decoration:none;">Open TOKIN Smart Room</a></td></tr></table></td></tr>
+      <tr><td style="padding:18px 28px;background:#0f172a;"><div style="font-size:12px;font-weight:700;color:#fff;">TOKIN Smart Room</div><div style="margin-top:4px;font-size:11px;color:#94a3b8;">Booking update · Automated notification</div></td></tr>
+    </table>
+  </td></tr></table>
+</body></html>`;
+}
+
+function buildCancellationAdaptiveCard(bookingId, booking, cancellation) {
+  const fields = buildBookingNotificationFields(bookingId, booking, config.appBaseUrl);
+  const isEarlyRelease = cancellation.action === "ended-early";
+  const originalTimeRange = `${formatNotificationTime(booking.startTime)} – ${formatNotificationTime(cancellation.originalEndTime)}`;
+  return JSON.stringify({
+    $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+    type: "AdaptiveCard",
+    version: "1.2",
+    body: [
+      {
+        type: "ColumnSet",
+        columns: [
+          {
+            type: "Column",
+            width: "auto",
+            items: [{ type: "Image", url: fields.logoUrl, altText: "TOKIN Smart Room", size: "Small" }],
+          },
+          {
+            type: "Column",
+            width: "stretch",
+            verticalContentAlignment: "Center",
+            items: [
+              { type: "TextBlock", text: "TOKIN", color: "Attention", size: "Medium", weight: "Bolder" },
+              { type: "TextBlock", text: "Smart Room", size: "Small", isSubtle: true, spacing: "None" },
+            ],
+          },
+        ],
+      },
+      {
+        type: "TextBlock",
+        text: isEarlyRelease ? "Room time released" : "Booking cancelled",
+        size: "Large",
+        weight: "Bolder",
+        wrap: true,
+        spacing: "Large",
+      },
+      {
+        type: "TextBlock",
+        text: isEarlyRelease
+          ? "The booking ended early. The remaining room time is available."
+          : "The booking was cancelled and its room time is available again.",
+        wrap: true,
+        isSubtle: true,
+      },
+      {
+        type: "Container",
+        style: "emphasis",
+        spacing: "Medium",
+        items: [
+          { type: "TextBlock", text: fields.title, size: "Medium", weight: "Bolder", wrap: true },
+          { type: "TextBlock", text: fields.roomName, color: "Attention", wrap: true, spacing: "Small" },
+          { type: "TextBlock", text: fields.bookingDate, wrap: true, spacing: "Small" },
+          {
+            type: "FactSet",
+            facts: [
+              { title: "Original time", value: originalTimeRange },
+              { title: isEarlyRelease ? "Updated time" : "Released time", value: fields.timeRange },
+              { title: "Booked by", value: fields.organizer },
+              { title: "Booking ID", value: fields.bookingId },
+            ],
+          },
+        ],
+      },
+    ],
+    actions: [{ type: "Action.OpenUrl", title: "Open TOKIN Smart Room", url: fields.appUrl }],
+  });
 }
 
 async function recordAudit({
@@ -1503,6 +1696,28 @@ async function loadSqlBooking(bookingId) {
       LEFT JOIN dbo.Rooms AS r ON r.Id = b.RoomId
       WHERE b.Id = @bookingId;`);
   return sqlBookingFromRecord(result.recordset[0]);
+}
+
+async function getSqlCancellationContext(bookingId, token) {
+  const id = assertBookingId(bookingId);
+  const booking = await loadSqlBooking(id);
+  if (!booking)
+    throw new ApiError(404, "booking-not-found", "Booking was not found.");
+  if (!verifyBookingCancellationToken(token, id, booking.endTime))
+    throw new ApiError(
+      403,
+      "invalid-cancellation-link",
+      "This cancellation link is invalid or has expired.",
+    );
+  return {
+    id: booking.id,
+    roomId: booking.roomId,
+    roomName: booking.roomName || "",
+    title: booking.title,
+    startTime: toIsoDate(booking.startTime),
+    endTime: toIsoDate(booking.endTime),
+    status: booking.status,
+  };
 }
 
 async function createSqlBooking(input, requesterUid) {
@@ -2357,6 +2572,186 @@ async function deleteSqlBooking(input) {
   }
 }
 
+async function sendBookingCancellationNotification(
+  bookingId,
+  originalBooking,
+  updatedBooking,
+  cancellation,
+) {
+  const email = assertYageoEmail(originalBooking.email, config.yageoDomain);
+  const actionLabel = cancellation.action === "ended-early"
+    ? "Room time released"
+    : "Booking cancelled";
+  const subject = `[TOKIN Smart Room] ${actionLabel} - ${originalBooking.title || originalBooking.roomName || bookingId}`;
+  const notificationBooking = {
+    ...updatedBooking,
+    notificationType: "booking_cancellation",
+  };
+  const teamsFields = {
+    ...buildBookingNotificationFields(bookingId, notificationBooking, config.appBaseUrl),
+    cancelUrl: "",
+    notificationType: "booking_cancellation",
+    cancellationAction: cancellation.action,
+    originalTimeRange: `${formatNotificationTime(originalBooking.startTime)} – ${formatNotificationTime(cancellation.originalEndTime)}`,
+  };
+  const message = buildCancellationMessage(
+    bookingId,
+    notificationBooking,
+    cancellation,
+  );
+
+  try {
+    await callFlow(
+      config.emailFlowUrl,
+      buildBookingFlowPayload({
+        email,
+        bookingId,
+        booking: notificationBooking,
+        subject,
+        message,
+        notificationType: "booking_cancellation",
+        teams: teamsFields,
+        teamsCard: buildCancellationAdaptiveCard(
+          bookingId,
+          notificationBooking,
+          cancellation,
+        ),
+      }),
+      "booking-cancellation",
+    );
+    await recordAuditBestEffort({
+      email,
+      subject,
+      status: "successful",
+      purpose: "Booking Cancellation",
+      bookingId,
+      bookingTitle: originalBooking.title || "",
+      roomId: originalBooking.roomId || "",
+      roomName: originalBooking.roomName || "",
+    });
+    return { notificationStatus: "sent" };
+  } catch (cause) {
+    await recordAuditBestEffort({
+      email,
+      subject,
+      status: "failed",
+      purpose: "Booking Cancellation",
+      bookingId,
+      bookingTitle: originalBooking.title || "",
+      roomId: originalBooking.roomId || "",
+      roomName: originalBooking.roomName || "",
+      errorCode: cause.code || "internal",
+      errorMessage: cause.message,
+    });
+    console.error("Booking cancellation notification failed.", {
+      bookingId,
+      message: cause instanceof Error ? cause.message : "Unknown error",
+    });
+    return {
+      notificationStatus: "failed",
+      notificationError: "The booking changed, but its email and Teams notice could not be sent.",
+    };
+  }
+}
+
+async function cancelSqlBooking(input, requesterUid) {
+  if (!input || typeof input !== "object" || Array.isArray(input))
+    throw new ApiError(400, "invalid-booking", "Booking details are invalid.");
+  const bookingId = assertBookingId(input.bookingId);
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+
+  let booking;
+  let updatedBooking;
+  let cancellation;
+  try {
+    await acquireBookingTransactionLock(transaction, bookingId);
+    const result = await transaction
+      .request()
+      .input("bookingId", sql.NVarChar(128), bookingId)
+      .query(`SELECT TOP 1 b.*, r.Name AS RoomName
+        FROM dbo.Bookings AS b WITH (UPDLOCK, HOLDLOCK)
+        LEFT JOIN dbo.Rooms AS r ON r.Id = b.RoomId
+        WHERE b.Id = @bookingId;`);
+    booking = sqlBookingFromRecord(result.recordset[0]);
+    if (!booking)
+      throw new ApiError(404, "booking-not-found", "Booking was not found.");
+    const signedLinkIsValid = verifyBookingCancellationToken(
+      input.token,
+      bookingId,
+      booking.endTime,
+    );
+    if (!signedLinkIsValid && booking.createdByUid !== requesterUid)
+      throw new ApiError(
+        403,
+        "booking-owner-required",
+        "Only the booking owner or someone with its cancellation link can cancel it.",
+      );
+    if (["REJECTED", "NO_SHOW"].includes(booking.status))
+      throw new ApiError(
+        409,
+        "booking-not-cancellable",
+        "This booking has already been cancelled or closed.",
+      );
+
+    const now = new Date();
+    const startTime = toDate(booking.startTime);
+    const originalEndTime = toDate(booking.endTime);
+    if (!startTime || !originalEndTime || originalEndTime <= now)
+      throw new ApiError(
+        409,
+        "booking-not-cancellable",
+        "This booking has already ended.",
+      );
+
+    if (now <= startTime) {
+      cancellation = { action: "cancelled", originalEndTime };
+      await transaction
+        .request()
+        .input("bookingId", sql.NVarChar(128), bookingId)
+        .query(`UPDATE dbo.Bookings
+          SET Status = N'REJECTED', VerificationTokenHash = NULL,
+              VerificationTokenCreatedAt = NULL, VerificationTokenExpiresAt = NULL,
+              UpdatedAt = SYSUTCDATETIME()
+          WHERE Id = @bookingId;`);
+      updatedBooking = { ...booking, status: "REJECTED" };
+    } else {
+      cancellation = { action: "ended-early", originalEndTime };
+      await transaction
+        .request()
+        .input("bookingId", sql.NVarChar(128), bookingId)
+        .input("endTime", sql.DateTime2, now)
+        .query(`UPDATE dbo.Bookings
+          SET EndTime = @endTime, UpdatedAt = SYSUTCDATETIME()
+          WHERE Id = @bookingId;`);
+      updatedBooking = { ...booking, endTime: now, actualEndTime: now };
+    }
+
+    await transaction
+      .request()
+      .input("bookingId", sql.NVarChar(128), bookingId)
+      .query("DELETE FROM dbo.EmailQueue WHERE BookingId = @bookingId;");
+    await transaction.commit();
+  } catch (cause) {
+    await transaction.rollback().catch(() => undefined);
+    throw cause;
+  }
+
+  const notification = await sendBookingCancellationNotification(
+    bookingId,
+    booking,
+    updatedBooking,
+    cancellation,
+  );
+  return {
+    bookingId,
+    action: cancellation.action,
+    status: updatedBooking.status,
+    endTime: toIsoDate(updatedBooking.endTime),
+    ...notification,
+  };
+}
+
 async function listMascotAssignments() {
   const { start, end } = currentBangkokMonth();
   const connection = await pool.connect();
@@ -2986,7 +3381,7 @@ const requestHandler = async (request, response) => {
       });
     }
     if (request.method === "GET" && url.pathname === "/api/bookings") {
-      await requireFirebaseUser(request);
+      const user = await requireFirebaseUser(request);
       const from = parseDateFilter(url.searchParams.get("from"), "from");
       const end = parseDateFilter(url.searchParams.get("end"), "end");
       if (from && end && end < from)
@@ -2997,7 +3392,21 @@ const requestHandler = async (request, response) => {
         );
       return json(response, 200, {
         success: true,
-        data: { bookings: await listSqlBookings(from, end) },
+        data: { bookings: await listSqlBookings(from, end, user.uid) },
+      });
+    }
+    if (
+      request.method === "GET" &&
+      /^\/api\/bookings\/[^/]+\/cancellation-context$/.test(url.pathname)
+    ) {
+      await requireFirebaseUser(request);
+      const bookingId = decodeURIComponent(url.pathname.split("/")[3]);
+      return json(response, 200, {
+        success: true,
+        data: await getSqlCancellationContext(
+          bookingId,
+          url.searchParams.get("token"),
+        ),
       });
     }
     if (request.method === "GET" && url.pathname === "/api/leaderboard") {
@@ -3040,6 +3449,16 @@ const requestHandler = async (request, response) => {
       return json(response, 201, {
         success: true,
         data: await createSqlBooking(await body(request), user.uid),
+      });
+    }
+    if (
+      request.method === "POST" &&
+      url.pathname === "/api/bookings/cancel"
+    ) {
+      const user = await requireFirebaseUser(request);
+      return json(response, 200, {
+        success: true,
+        data: await cancelSqlBooking(await body(request), user.uid),
       });
     }
     if (

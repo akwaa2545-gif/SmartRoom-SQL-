@@ -24,6 +24,7 @@ import { DashboardSkeleton } from "./components/SkeletonLoader";
 const AdminPanel = React.lazy(() => import("./components/AdminPanel"));
 import ConfirmationModal from "./components/ConfirmationModal";
 import VerifyBookingPage from "./components/VerifyBookingPage";
+import CancelBookingPage from "./components/CancelBookingPage";
 import { LocalNetworkAccessGuide } from "./components/LocalNetworkAccessGuide";
 import {
   TRANSLATIONS,
@@ -72,6 +73,7 @@ import {
 import { isBookingNoCheckIn, isBookingRoomInUse } from "./utils/bookingStatus";
 import {
   createPortableBooking,
+  cancelPortableBooking,
   getPortableBookings,
   getPortableMaintenanceHistory,
   getPortableMascotAssignments,
@@ -89,7 +91,7 @@ import {
 } from "./utils/mascots";
 
 type AppView = "grid" | "dashboard" | "leaderboard" | "admin";
-type RouteMode = "app" | "verify";
+type RouteMode = "app" | "verify" | "cancel";
 
 const USER_DEFAULT_VIEW: AppView = "dashboard";
 const VERIFICATION_WINDOW_BEFORE_MS = 15 * 60 * 1000;
@@ -134,6 +136,7 @@ const getRouteMode = (path?: string): RouteMode => {
   if (typeof window !== "undefined") {
     const params = new URLSearchParams(window.location.search);
     if (params.get("verify") === "booking") return "verify";
+    if (params.get("cancelBooking")) return "cancel";
   }
   return "app";
 };
@@ -1209,6 +1212,48 @@ const SmartRoomApplication: React.FC = () => {
       ),
     [bookings, roomStatusNow],
   );
+
+  const handleRequestBookingCancellation = (booking: Booking) => {
+    const isEarlyRelease = Date.now() > booking.startTime.getTime();
+    const actionText = isEarlyRelease ? "End early" : "Cancel booking";
+    const message = isEarlyRelease
+      ? `End “${booking.title}” now and release the remaining room time? A cancellation update will be sent to ${booking.email || "the booking owner"} by email and Microsoft Teams.`
+      : `Cancel “${booking.title}” on ${formatBookingDateLabel(booking.startTime)}? The room will be released, and an update will be sent to ${booking.email || "the booking owner"} by email and Microsoft Teams.`;
+
+    setConfirmModal({
+      isOpen: true,
+      title: isEarlyRelease ? "End this booking early?" : "Cancel this booking?",
+      message,
+      isDanger: true,
+      confirmText: actionText,
+      cancelText: "Keep booking",
+      onConfirm: async () => {
+        setConfirmModal((previous) => ({ ...previous, isOpen: false }));
+        try {
+          const result = await cancelPortableBooking(booking.id);
+          setBookings((previous) => previous.map((current) => {
+            if (current.id !== booking.id) return current;
+            if (result.action === "cancelled") {
+              return { ...current, status: BookingStatus.REJECTED };
+            }
+            return { ...current, endTime: new Date(result.endTime) };
+          }));
+
+          const completedMessage = result.action === "ended-early"
+            ? "Booking ended early and the remaining room time was released."
+            : "Booking cancelled and the room time was released.";
+          if (result.notificationStatus === "sent") {
+            showNotification(`${completedMessage} Email and Teams notice sent to ${booking.email}.`, "success");
+          } else {
+            showNotification(`${completedMessage} ${result.notificationError || "The email and Teams notice could not be sent."}`, "error");
+          }
+        } catch (cause) {
+          const details = getFirebaseErrorDetails(cause);
+          showNotification(`Booking cancellation failed: ${details.message}`, "error");
+        }
+      },
+    });
+  };
 
   const handleDeleteBooking = async (id: string) => {
     setConfirmModal({
@@ -2474,6 +2519,7 @@ const SmartRoomApplication: React.FC = () => {
               maintenanceHistory={maintenanceHistory}
               language={language}
               onDeleteBooking={handleDeleteBooking}
+              onCancelBooking={isPortableMailApiEnabled() ? handleRequestBookingCancellation : undefined}
               onConfirmBooking={handleConfirmBooking}
               selectedRoomId={selectedRoomId}
               setSelectedRoomId={setSelectedRoomId}
@@ -2674,6 +2720,17 @@ const App: React.FC = () => {
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
+
+  if (routeMode === "cancel") {
+    const params = new URLSearchParams(window.location.search);
+    return (
+      <CancelBookingPage
+        bookingId={params.get("cancelBooking") || ""}
+        token={params.get("cancelToken") || ""}
+        language={language}
+      />
+    );
+  }
 
   if (routeMode === "verify") {
     return <VerifyBookingPage language={language} />;

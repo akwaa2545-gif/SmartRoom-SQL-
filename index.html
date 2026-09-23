@@ -397,10 +397,10 @@
       @keyframes mascotWave { 0%,100%{transform:rotate(-5deg)}50%{transform:rotate(12deg) translateY(-3px)} }
       @keyframes mascotSparkle { 0%,100%{transform:scale(.9);filter:drop-shadow(0 0 0 #facc15)}50%{transform:scale(1.15);filter:drop-shadow(0 0 6px #facc15)} }
 
-      /* 5. Cozy Snooze Breathing when Room is Used */
+      /* 5. Cozy Snooze Breathing when Room is Used (Gentle horizontal belly rise & fall) */
       @keyframes mascotSleepBreathe {
-        0%, 100% { transform: translateY(1.5px) scale(1, 0.94); }
-        50%      { transform: translateY(-0.5px) scale(1.03, 1.04); }
+        0%, 100% { transform: translateY(0.5px) scale(1, 0.96); }
+        50%      { transform: translateY(-0.8px) scale(1.02, 1.04); }
       }
 
       /* 6. Multi-Stage Floating Drifting "Zzz" Sleep Bubbles */
@@ -448,7 +448,7 @@
         transform-origin: 32px 14px;
       }
 
-      /* Hover Jump State */
+      /* Hover Wiggle State (Irresistible Minion Jelly Giggle) */
       .mascot-hover-run,
       .mascot-playful {
         transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -457,7 +457,7 @@
 
       .mascot-hover-run:hover,
       .mascot-playful:hover {
-        animation: mascotHoverJump 0.62s cubic-bezier(0.34, 1.56, 0.64, 1) infinite !important;
+        animation: mascotCuteWiggle 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) infinite !important;
         transform-origin: 50% 85%;
         z-index: 25;
       }

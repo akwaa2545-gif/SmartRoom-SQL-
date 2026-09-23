@@ -84,6 +84,7 @@ export interface PortableBooking {
   verificationEmailScheduledAt?: string;
   verificationWindowOpenedAt?: string;
   verificationWindowClosedAt?: string;
+  canCancel?: boolean;
   verificationEmailNextRetryAt?: string;
   verificationEmailLastAttemptAt?: string;
   verificationEmailFailedAt?: string;
@@ -136,6 +137,16 @@ export interface PortableLeaderboard {
   periodEnd: string;
   leaders: PortableLeaderboardEntry[];
   bookingRanks: PortableLeaderboardBookingRank[];
+}
+
+export interface PortableCancellationContext {
+  id: string;
+  roomId: string;
+  roomName: string;
+  title: string;
+  startTime: string;
+  endTime: string;
+  status: PortableBooking['status'];
 }
 
 export interface PortableAdminSession {
@@ -194,6 +205,15 @@ export const isPortableMailApiEnabled = () => Boolean(apiBaseUrl);
 
 export const getPortableRooms = () => request<{ rooms: PortableRoom[] }>('/api/rooms');
 export const getPortableBookings = () => request<{ bookings: PortableBooking[] }>('/api/bookings');
+export const getPortableCancellationContext = (bookingId: string, token: string) => request<PortableCancellationContext>(`/api/bookings/${encodeURIComponent(bookingId)}/cancellation-context?token=${encodeURIComponent(token)}`);
+export const cancelPortableBooking = (bookingId: string, token?: string) => request<{
+  bookingId: string;
+  action: 'cancelled' | 'ended-early';
+  status: string;
+  endTime: string;
+  notificationStatus: 'sent' | 'failed';
+  notificationError?: string;
+}>('/api/bookings/cancel', { method: 'POST', body: JSON.stringify({ bookingId, token }) });
 export const archivePortableExpiredBooking = (bookingId: string) => request<{ bookingId: string; archived: boolean }>(`/api/bookings/${encodeURIComponent(bookingId)}/archive-expired`, { method: 'POST' });
 export const getPortableMaintenanceHistory = () => request<{ history: PortableMaintenanceHistoryRecord[] }>('/api/room-maintenance-history');
 export const getPortableLeaderboard = () => request<PortableLeaderboard>('/api/leaderboard');

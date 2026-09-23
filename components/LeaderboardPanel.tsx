@@ -1384,7 +1384,7 @@ export const AssignedMascot: React.FC<{
       aria-label={mascot.label}
     >
       {isUsed && (
-        <span aria-hidden="true" className="pointer-events-none absolute -top-3.5 right-0 z-10 flex select-none items-baseline font-black leading-none text-indigo-600">
+        <span aria-hidden="true" className="pointer-events-none absolute -top-3.5 left-0.5 z-10 flex select-none items-baseline font-black leading-none text-indigo-600">
           <span className="mascot-zzz-bubble-1 text-[8px]">z</span>
           <span className="mascot-zzz-bubble-2 ml-0.5 text-[10px]">z</span>
           <span className="mascot-zzz-bubble-3 ml-0.5 text-[12px] text-indigo-700">Z</span>
