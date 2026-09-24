@@ -31,6 +31,7 @@ BEGIN
     VerificationTokenExpiresAt datetime2 NULL,
     VerifiedAt datetime2 NULL,
     ActualStartTime datetime2 NULL,
+    ActualEndTime datetime2 NULL,
     CreatedAt datetime2 NOT NULL CONSTRAINT DF_Bookings_CreatedAt DEFAULT SYSUTCDATETIME(),
     UpdatedAt datetime2 NOT NULL CONSTRAINT DF_Bookings_UpdatedAt DEFAULT SYSUTCDATETIME(),
     CONSTRAINT CK_Bookings_TimeRange CHECK (EndTime > StartTime),

@@ -50,6 +50,7 @@ const adminLoginTimes = new Map();
 const ADMIN_SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 const ADMIN_SESSION_ACTIVE_WINDOW_MS = 5 * 60 * 1000;
 const ADMIN_SESSION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const BANGKOK_UTC_OFFSET_MS = 7 * 60 * 60 * 1000;
 let adminActivityWarningShown = false;
 const MASCOT_IDS = new Set([
   "king-cat", "penguin", "bunny", "pig", "fox", "panda",
@@ -62,6 +63,17 @@ const ANNOUNCEMENT_AUDIENCES = new Set(["all", "guests", "logged_in"]);
 const ANNOUNCEMENT_CATEGORIES = new Set([
   "info", "alert", "warning", "success", "maintenance", "event",
 ]);
+
+function currentBangkokDayStart(now = new Date()) {
+  const bangkokNow = new Date(now.getTime() + BANGKOK_UTC_OFFSET_MS);
+  return new Date(
+    Date.UTC(
+      bangkokNow.getUTCFullYear(),
+      bangkokNow.getUTCMonth(),
+      bangkokNow.getUTCDate(),
+    ) - BANGKOK_UTC_OFFSET_MS,
+  );
+}
 
 function json(response, status, body) {
   response.writeHead(status, {
@@ -3232,6 +3244,36 @@ async function archiveExpiredBooking(bookingId) {
   }
 }
 
+async function finalizePastIncompleteSqlBookings() {
+  const todayStart = currentBangkokDayStart();
+  const connection = await pool.connect();
+  const result = await connection
+    .request()
+    .input("todayStart", sql.DateTime2, todayStart)
+    .query(`UPDATE dbo.Bookings
+      SET ActualEndTime = EndTime, UpdatedAt = SYSUTCDATETIME()
+      WHERE StartTime < @todayStart
+        AND ActualStartTime IS NOT NULL
+        AND ActualEndTime IS NULL
+        AND Status NOT IN (N'REJECTED', N'NO_SHOW');`);
+  const finalizedCount = result.rowsAffected?.[0] || 0;
+  if (finalizedCount > 0)
+    console.info("Finalized past incomplete SQL bookings.", {
+      count: finalizedCount,
+    });
+  return finalizedCount;
+}
+
+async function maintainSqlBookingHistory() {
+  try {
+    await finalizePastIncompleteSqlBookings();
+  } catch (cause) {
+    console.error("SQL booking history maintenance failed.", {
+      message: cause?.message || String(cause),
+    });
+  }
+}
+
 async function processQueue() {
   const bookingIds = await claimDueVerificationEmails();
   for (const bookingId of bookingIds) {
@@ -3765,6 +3807,8 @@ server.listen(config.port, config.listenHost, () =>
     `Smart Room portable API listening on ${config.tlsPfxPath ? "https" : "http"}://${config.listenHost}:${config.port}`,
   ),
 );
+void maintainSqlBookingHistory();
+setInterval(maintainSqlBookingHistory, 60_000).unref();
 setInterval(
   () =>
     processQueue().catch((cause) =>

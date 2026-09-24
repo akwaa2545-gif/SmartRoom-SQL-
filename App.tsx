@@ -1081,6 +1081,10 @@ const SmartRoomApplication: React.FC = () => {
 
   // 3.5 Preserve past usage history by closing incomplete checked-in bookings at their scheduled end time
   useEffect(() => {
+    // SQL-backed bookings are finalized by the Portable API's SQL maintenance job.
+    // Do not try to write their records into the legacy Firestore collection.
+    if (isPortableMailApiEnabled()) return;
+
     const finalizePastIncomplete = async () => {
       if (bookings.length === 0) return;
       const nowTime = new Date();
