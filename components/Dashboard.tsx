@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { TRANSLATIONS, formatTimeString, formatDate, translateText, isRoomClosedAt, isRoomClosedAllDay, formatDepartment, getDepartmentSelectOptions, formatTimeRange } from '../translations';
 import { getBookingDepartmentBadgeClass, getBookingDepartmentClassForState, getBookingDepartmentClass } from '../bookingVisualStyles';
+import BookingCardDetails from './BookingCardDetails';
 import CheckInValidationModal from './CheckInValidationModal';
 import ConfirmationModal from './ConfirmationModal';
 
@@ -1347,7 +1348,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                                   const honor = getLeaderboardHonorInfo(leaderboardRank, language);
 
                                   return (
-                                    <div key={b.id} className={`p-2 rounded-lg border text-[11px] transition-all relative ${
+                                    <div key={b.id} tabIndex={0} className={`booking-card p-2 rounded-lg border text-[11px] transition-all relative ${
                                       getBookingDepartmentClass(b.department, { context: 'timeline' })
                                     } ${honor ? honor.frameClass : ''} ${noCheckIn ? 'border-rose-400 opacity-90' : b.id === roomStats.currentBooking?.id
                                       ? 'border-slate-300/50 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.35)]'
@@ -1381,6 +1382,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                                           </span>
                                         </div>
                                       </div>
+                                      <BookingCardDetails booking={b} language={language} />
                                     </div>
                                   );
                                 })}

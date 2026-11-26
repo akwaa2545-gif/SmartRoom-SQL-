@@ -79,6 +79,34 @@
         85%  { border-color: #00ff44; }
         100% { border-color: #00f5ff; }
       }
+      .booking-card-details {
+        display: grid;
+        grid-template-rows: 0fr;
+        opacity: 0;
+        visibility: hidden;
+        overflow-wrap: anywhere;
+        transition: grid-template-rows 200ms ease, opacity 200ms ease,
+          visibility 200ms step-end;
+      }
+      .booking-card:focus-visible > .booking-card-details {
+        grid-template-rows: 1fr;
+        opacity: 1;
+        visibility: visible;
+        transition-timing-function: ease, ease, step-start;
+      }
+      @media (hover: hover) {
+        .booking-card:hover > .booking-card-details {
+          grid-template-rows: 1fr;
+          opacity: 1;
+          visibility: visible;
+          transition-timing-function: ease, ease, step-start;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .booking-card-details {
+          transition: none;
+        }
+      }
       .booking-it-neon {
         position: relative;
         isolation: isolate;
